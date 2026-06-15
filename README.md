@@ -126,9 +126,9 @@ Or ....
     For `Git-bash` CLI :
   
     ```BASH
-    pyenv local 3.11.3
+    pyenv local 3.11.8
     python -m venv .venv
-    source .venv/Scripts/activate
+    source .venv/bin/activate
     python -m pip install --upgrade pip
     pip install -r requirements.txt
     ```
