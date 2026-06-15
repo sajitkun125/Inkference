@@ -137,3 +137,6 @@ dmypy.json
 
 # Data 
 data/
+
+#Checkpoints
+models/bentham_trocr_checkpoint/
