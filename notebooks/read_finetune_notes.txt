@@ -1,0 +1,78 @@
+================================================================================
+Continue fine-tuning the Bentham TrOCR checkpoint on the READ (ICFHR-2016 Bozen)
+dataset  --  notes for fineTuneTrOcrCheckPointWithReadOrGermanDataSet.ipynb
+================================================================================
+
+WHY AN EXTRA STEP IS NEEDED
+---------------------------
+Bentham gave you pre-cropped line images. READ/Bozen does NOT: it is page-level,
+i.e. full-page .JPG scans + PAGE-XML (page/page/*.xml) holding per-line polygons
+and transcriptions. So before training we must:
+  1. Parse each page's XML -> crop every <TextLine> polygon to its own line image
+     + grab its <Unicode> text.
+  2. Feed those crops through the SAME Dataset / Trainer pipeline used for Bentham.
+
+
+CELLS ADDED TO THE NOTEBOOK (after the optimizer-load cell)
+-----------------------------------------------------------
+  1. Markdown intro      - explains the page->line-crop step, and to skip the optimizer.
+  2. Config              - READ_ROOT, CROP_DIR, READ_OUTPUT_DIR, EPOCHS, LEARNING_RATE
+                           + the Seq2SeqTrainer imports.
+  3. Parse + crop        - reads each PAGE-XML, crops each TextLine bounding box,
+                           builds train_df / val_df. Idempotent (writes each crop
+                           once), so reruns are cheap.
+  4. Dataset + transforms- same LineOCRDataset + augmentations as the Bentham run.
+  5. Metrics             - CER / WER compute_metrics.
+  6. Model prep          - re-wires decoder tokens + generation config on the
+                           already-loaded Bentham model, switches it to .train().
+  7. Trainer + train()   - identical Seq2SeqTrainer setup as Bentham.
+  8. Save                - writes best model + processor to <READ_OUTPUT_DIR>/final.
+
+
+VERIFIED ON THE LOCAL DATA
+--------------------------
+  Training:   350 pages -> 8366 line crops
+  Validation:  50 pages -> 1040 line crops
+  Crops + transcriptions look correct.
+
+
+THINGS TO KNOW BEFORE RUNNING ON COLAB
+--------------------------------------
+* SKIP the optimizer-load cell (the 2.5 GB optimizer-002.pt one that crashed the
+  machine). The new code starts a FRESH optimizer, which is the correct choice when
+  adapting to a new dataset. Loading the Bentham optimizer would be both wrong (it
+  is tied to Bentham's parameter trajectory) and a RAM risk.
+    - The crash was an out-of-memory: optimizer-002.pt is 2.5 GB and torch.load
+      pulls it all into RAM at once. On a 5.6 GB machine (with the model already
+      loaded) that exhausts memory and thrashes swap -> freeze.
+    - The file is huge because AdamW stores 2 momentum buffers per parameter, each
+      the size of the model weights, so optimizer state ~= 2x model size.
+
+* EDIT READ_ROOT to wherever the READ data lives in your Drive. The default mirrors
+  the local layout:  .../PublicData/{Training,Validation}/
+    - Images in:   <split>/Images/<page>.JPG
+    - PAGE-XML in: <split>/page/page/<page>.xml
+
+* Crops are written to LOCAL Colab disk (/content/read_lines), NOT Drive -- Drive is
+  very slow with thousands of tiny files. They are a rebuildable cache, so ephemeral
+  storage is fine.
+
+* New checkpoints save to READ_OUTPUT_DIR on Drive so they survive the session.
+
+* BUMP BATCH_SIZE to 16 (it is 8 in the Paths cell) once on a GPU -- your Bentham GPU
+  notebook used 16.
+
+* On a Colab GPU runtime the device auto-detects as cuda and fp16 kicks in
+  automatically.
+
+* LANGUAGE SHIFT WARNING: READ/Bozen is German with historical abbreviations, while
+  trocr-base-handwritten and the Bentham checkpoint are English-trained. Fine-tuning
+  adapts the decoder, but expect higher CER than Bentham's 0.04 -- the language shift
+  is significant.
+
+
+HYPER-PARAMETERS USED
+---------------------
+  EPOCHS        = 8
+  LEARNING_RATE = 2e-5   (lower than Bentham's 3e-5 since we resume from a trained model)
+  BATCH_SIZE / MAX_TARGET_LENGTH (128) / NUM_BEAMS (4)  -- from the Paths cell.
