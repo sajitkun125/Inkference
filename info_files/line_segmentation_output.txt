@@ -1,0 +1,126 @@
+================================================================================
+Line-segmentation output  --  manual-transcription pages (Forster journal scans)
+Produced by: notebooks/segmentManualTranscriptionsIntoLinesWithKrakenFromGoogleColabDrive.ipynb
+             (local twin: notebooks/segmentManualTranscriptionsIntoLinesWithKraken.ipynb)
+================================================================================
+
+WHAT THIS IS
+------------
+We have full page scans + their manual transcriptions (one physical line per text
+line) but NO line coordinates. To train/test TrOCR we need (line_image, line_text)
+pairs, so the notebook detects each line on the page, aligns it to the matching
+transcription line, crops it, and writes everything out as CSV + PNGs.
+
+This file documents WHAT the notebook outputs and WHERE. The actual data lives on
+Google Drive under MyDrive/transcriptions/ (not in the repo).
+
+
+INPUT (on Google Drive)
+-----------------------
+MyDrive/transcriptions/
+  5/  B5_P_014.txt  B5_P_015.txt  B5_P_016.txt  B5_P_017.txt  B5_P_020.txt
+  6/  B6_P_014.txt  B6_P_015.txt  B6_P_016.txt  B6_P_017.txt  B6_P_020.txt
+  images/5/  B5_P_014.jpg ...        # page scan, same basename as the .txt
+  images/6/  B6_P_014.jpg ...
+Pairing rule: transcriptions/<F>/<stem>.txt  <->  images/<F>/<stem>.jpg
+
+
+PIPELINE
+--------
+1. DocLayout-YOLO (DocStructBench)  -> detect content regions (optional gate).
+2. Kraken baseline segmentation     -> baseline + boundary polygon per line.
+3. Filter tiny boxes (MIN_W/MIN_H), gate by content region, sort top-to-bottom.
+4. (optional) auto-merge same writing band -> currently OFF.
+5. Polygon-masked crop (bbox + small pad, everything outside the line polygon
+   whited out) so neighbour ascenders/descenders don't bleed in.
+6. Verify: overlay numbered boxes vs numbered GT; fix per page with drop/merge.
+7. Export matched pages -> line_crops/ + lines.csv.
+8. Manual check -> lines_checked.csv (hand-edit/delete lines).
+9. 90/10 split -> train.csv + test.csv (TrOCR-ready).
+
+
+OUTPUT FILES (all written to MyDrive/transcriptions/)
+-----------------------------------------------------
+line_crops/<5|6>/<stem>_lNN.png
+    One PNG per exported line (NN = 0-based line index down the page), polygon-
+    masked on a white background. e.g. line_crops/6/B6_P_014_l03.png
+
+lines.csv
+    Auto-export of every page whose detected-line count matched its transcription.
+    Columns:  file_name , text
+      file_name = absolute Drive path to the line crop
+      text      = the matching transcription line (reading order)
+    REGENERATED each time the export cell runs (do not hand-edit this one).
+
+lines_checked.csv
+    A working COPY of lines.csv for manual correction (created once, never
+    overwritten by the notebook). Edit `text` here, or delete whole rows for
+    bad/extra lines. The split reads from THIS file.
+
+train.csv  /  test.csv
+    90% / 10% split of lines_checked.csv (after dropping any row with empty text
+    or a missing/unreadable image). Same  file_name,text  schema. Ready to feed to
+    LineOCRDataset for TrOCR training / evaluation.
+
+
+CSV SCHEMA
+----------
+    file_name,text
+    /content/drive/MyDrive/transcriptions/line_crops/6/B6_P_014_l00.png,"<transcribed line>"
+- Exactly two columns; header row present.
+- Paths are Drive-absolute (work as-is in a Colab fine-tune notebook). For LOCAL
+  training, re-root file_name to wherever the crops live on disk.
+
+
+LAST OBSERVED RUN (Kraken raw detections, auto-merge OFF, layout gating inert)
+------------------------------------------------------------------------------
+  page          raw lines   gt lines
+  5/B5_P_014        35          30
+  5/B5_P_015        32          28
+  5/B5_P_016        41          33
+  5/B5_P_017        35          33
+  5/B5_P_020        40          31
+  6/B6_P_014        33          29
+  6/B6_P_015        40          35
+  6/B6_P_016        34          34
+  6/B6_P_017        38          30
+  6/B6_P_020        39          32
+  ----------------------------------
+  TOTAL            367         315
+Detected > GT on every page: Kraken splits margin date labels, right-aligned
+Latin citations and interlinear words off the writing line; the transcription
+folds those into one line. Reconcile per page (drop/merge) until counts match,
+then export.
+
+
+KEY SETTINGS / KNOBS (config cell)
+----------------------------------
+  PAD_X = 6, PAD_Y = 2          crop padding (vertical kept small)
+  MASK_TO_POLYGON = True        white-out outside the line polygon
+  POLY_PAD = 2                  dilate mask so own strokes aren't clipped
+  MIN_W = 40, MIN_H = 12        drop boxes smaller than this (noise)
+  AUTO_MERGE_VOVERLAP = False   same-band auto-merge (OFF). True + VOVERLAP_FRAC
+                                merges horizontal splits; raise frac to merge less.
+  USE_LAYOUT_FILTER = True      DocLayout-YOLO gate (see caveat below)
+  SPLIT_BY = "line"             "line" (shuffle lines) or "page" (no page leakage)
+  TEST_FRAC = 0.10, SEED = 42   reproducible 90/10 split
+
+
+CAVEATS
+-------
+- DocLayout-YOLO (DocStructBench) labels these handwritten scans as `figure`, so
+  it finds 0 content regions and the gate is effectively inert. Add "figure" to
+  CONTENT_CLASSES to gate by the writing block, or set USE_LAYOUT_FILTER=False.
+- Alignment is by reading order, so GT must be manually verified per line
+  (that is what lines_checked.csv + the per-page review cell are for).
+- Small set (~315 lines over 10 pages): best used to CONTINUE fine-tuning an
+  existing checkpoint, or as an in-domain validation/test set, not to train from
+  scratch.
+
+
+LOADING IN TrOCR
+----------------
+    df = pd.read_csv("/content/drive/MyDrive/transcriptions/train.csv")
+    train_dataset = LineOCRDataset(df, processor, train_transforms, MAX_TARGET_LENGTH)
+    # test.csv likewise for evaluation
+================================================================================
