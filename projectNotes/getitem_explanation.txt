@@ -1,0 +1,137 @@
+__getitem__ Deep Dive — BenthamOCRDataset
+==========================================
+
+WHAT __getitem__ IS AND WHY IT EXISTS
+--------------------------------------
+PyTorch's DataLoader needs to know how to fetch one sample. It calls dataset[idx]
+behind the scenes — that triggers __getitem__. You define it once; the DataLoader
+handles batching, shuffling, and parallel workers automatically.
+
+
+STEP 1 — LOAD THE IMAGE
+------------------------
+    image = Image.open(self.df["file_name"][idx]).convert("RGB")
+
+self.df["file_name"][idx] is a path like ../data/Bentham/.../Lines/000_0.png.
+
+.convert("RGB") is important because the Bentham scans are greyscale PNGs. Pillow
+loads them as mode L (1 channel). TrOCR's vision encoder (a ViT) expects exactly
+3 channels — converting to RGB duplicates the single channel three times, giving
+a valid 3-channel tensor without losing information.
+
+
+STEP 2 — APPLY AUGMENTATIONS (TRAINING ONLY)
+---------------------------------------------
+    if self.transforms:
+        image = self.transforms(image)
+
+train_transforms does three things:
+  - Grayscale(num_output_channels=3)         keeps 3 channels but desaturates
+  - RandomAffine(degrees=2, translate=...)   tiny rotation/shift for scan skew
+  - ColorJitter(brightness=0.3, ...)         simulates different scan qualities
+
+For val_dataset and test_dataset, eval_transforms only does Grayscale — no random
+changes, so evaluation is deterministic and comparable.
+
+
+STEP 3 — IMAGE -> TENSOR THE MODEL UNDERSTANDS
+-----------------------------------------------
+    pixel_values = self.processor(image, return_tensors="pt").pixel_values
+
+TrOCRProcessor wraps a ViTImageProcessor under the hood. It does:
+  1. Resize the image to 384x384 (what the ViT encoder was pre-trained on)
+  2. Normalize pixel values: subtract mean [0.5, 0.5, 0.5], divide by std [0.5, 0.5, 0.5]
+     -> values land in [-1, 1]
+  3. Returns a dict; .pixel_values pulls out the tensor
+
+Shape at this point: [1, 3, 384, 384] — the leading 1 is a fake batch dimension
+added by return_tensors="pt".
+
+    pixel_values.squeeze()  -> [3, 384, 384]
+
+.squeeze() removes that fake batch dim so the DataLoader can re-batch many samples
+correctly into [batch_size, 3, 384, 384].
+
+
+STEP 4 — GROUND-TRUTH TEXT -> TOKEN IDs
+-----------------------------------------
+    labels = self.processor.tokenizer(
+        self.df["text"][idx],
+        padding="max_length",
+        max_length=self.max_target_length,   # 128
+    ).input_ids
+
+The tokenizer (RoBERTa BPE) converts text into a list of integers. For example:
+
+    "The quick brown fox"
+    -> [0, 133, 2119, 6219, 35308, 2, 1, 1, 1, ..., 1]
+        ^BOS                        ^EOS ^padding...
+
+padding="max_length" ensures every sample has exactly 128 tokens — short texts are
+padded with pad_token_id (usually 1), long texts are truncated. Fixed length is
+required so the DataLoader can stack samples into a rectangular batch tensor.
+
+
+STEP 5 — THE -100 MASKING TRICK
+---------------------------------
+    labels = [l if l != self.processor.tokenizer.pad_token_id else -100 for l in labels]
+
+This is a PyTorch convention. CrossEntropyLoss has a built-in ignore_index=-100:
+
+    Loss = -1/N * sum( log P(correct_token) )   <- only summed where label != -100
+
+Without this, if your text is 10 tokens but padded to 128, the model would be
+penalized for not outputting 118 pad tokens. The gradient would push the decoder
+to generate pad tokens — completely breaking training.
+
+With -100, those 118 positions contribute zero to the loss. The model only learns
+from the real text tokens.
+
+
+STEP 6 — THE RETURN DICT
+--------------------------
+    return {
+        "pixel_values": pixel_values.squeeze(),   # [3, 384, 384]  float32
+        "labels": torch.tensor(labels),           # [128]          int64
+    }
+
+The key names matter. The trainer uses default_data_collator, which stacks these
+dicts into batched tensors. VisionEncoderDecoderModel.forward() accepts exactly
+these keyword arguments — so you can call model(**batch) and it works without
+any glue code.
+
+
+THE FULL DATA FLOW IN ONE PICTURE
+-----------------------------------
+
+    disk: 000_0.png  +  "The quick brown fox"
+             |                    |
+        PIL.Image.open        read from df
+             |
+        .convert("RGB")
+             |
+        train_transforms    (augment: rotate, jitter)
+             |
+        TrOCRProcessor      (resize 384x384, normalize)
+             |                    |
+        pixel_values          tokenizer
+        [3, 384, 384]         [128] int ids
+                                   |
+                              replace pad -> -100
+                                   |
+                  +----------------+------------------+
+                  |  {"pixel_values": ..., "labels": ...}  |
+                  +---------------------------------------+
+                                   |
+                          DataLoader.collate
+                                   |
+                  batch["pixel_values"]  [16, 3, 384, 384]
+                  batch["labels"]        [16, 128]
+                                   |
+                      VisionEncoderDecoderModel(**batch)
+                                   |
+                        loss -> backward -> optimizer step
+
+The ViT encoder processes the image into contextual embeddings; the autoregressive
+decoder attends to those embeddings and predicts one token at a time — that is the
+core of TrOCR.

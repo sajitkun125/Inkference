@@ -1,0 +1,79 @@
+CPU Training Crash Fixes — TrOCR on Bentham Dataset
+=====================================================
+
+ROOT CAUSE
+----------
+Main culprit is RAM overflow from BATCH_SIZE=16.
+Each TrOCR sample is a [3, 384, 384] float32 tensor, so a batch of 16 consumes
+~450MB of RAM before the model's activations. On CPU the optimizer states also
+live in RAM alongside everything else.
+
+
+FIX 1 — Reduce batch size + add gradient accumulation (most important)
+-----------------------------------------------------------------------
+Change TrainingConfig so the effective batch size stays 16 but only 2 images
+live in RAM at once:
+
+    @dataclass(frozen=True)
+    class TrainingConfig:
+        BATCH_SIZE:    int   = 2        # was 16
+        GRAD_ACCUM:    int   = 8        # 2 x 8 = effective batch of 16
+        EPOCHS:        int   = 3        # was 10 — fewer on CPU
+        LEARNING_RATE: float = 5e-5
+
+Then pass it in the training args:
+
+    training_args = Seq2SeqTrainingArguments(
+        ...
+        per_device_train_batch_size=TrainingConfig.BATCH_SIZE,
+        per_device_eval_batch_size=TrainingConfig.BATCH_SIZE,
+        gradient_accumulation_steps=TrainingConfig.GRAD_ACCUM,
+        dataloader_num_workers=0,   # avoids multiprocessing crashes on CPU
+        ...
+    )
+
+
+FIX 2 — Add max_steps as a safety cap
+--------------------------------------
+If you just want to validate the pipeline without waiting for full training:
+
+    training_args = Seq2SeqTrainingArguments(
+        ...
+        max_steps=500,   # remove this once you are confident it runs
+        ...
+    )
+
+
+FIX 3 — Train on a data subset first
+--------------------------------------
+Add this before creating datasets to smoke-test the whole pipeline cheaply:
+
+    QUICK_RUN = True   # set False for real training
+    if QUICK_RUN:
+        train_df = train_df.sample(500, random_state=42).reset_index(drop=True)
+        val_df   = val_df.sample(100,  random_state=42).reset_index(drop=True)
+
+
+FIX 4 — Enable gradient checkpointing
+--------------------------------------
+Trades compute for memory — slows training ~20% but halves activation RAM.
+Add this right after model.to(device):
+
+    model.gradient_checkpointing_enable()
+
+
+REALISTIC EXPECTATIONS ON CPU
+-------------------------------
+Config                              | ~Time per epoch  | Feasible?
+------------------------------------|------------------|----------------------
+batch=16, full data                 | 8–20h            | No (crashes)
+batch=2, grad_accum=8, full data    | 6–15h            | Technically yes, painful
+batch=2, 500 samples                | 30–60min         | Good for validation
+GPU (Colab free T4)                 | 15–30min/epoch   | Recommended
+
+
+RECOMMENDATION
+--------------
+For real training, Kaggle and Google Colab both offer free GPU notebooks
+(T4/P100). With a GPU this trains in under 2 hours for 3 epochs.
+Just upload your notebook and data there.
