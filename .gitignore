@@ -140,3 +140,7 @@ data/
 
 #Checkpoints
 models/bentham_trocr_checkpoint/
+
+#Large and not necessary notebooks
+visualizeFinalTranscriptionLinesAndGT.ipynb
+
