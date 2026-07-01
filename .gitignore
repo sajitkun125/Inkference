@@ -144,3 +144,9 @@ models/bentham_trocr_checkpoint/
 #Large and not necessary notebooks
 visualizeFinalTranscriptionLinesAndGT.ipynb
 
+# Inkference platform: runtime data + assembled inference model + build artifacts
+.inkference_data/
+models/
+src/*.egg-info/
+*.egg-info/
+

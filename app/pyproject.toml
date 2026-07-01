@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "inkference"
+version = "0.1.0"
+description = "HTR + RAG platform for historical handwritten documents (Inkference)"
+readme = "README.md"
+requires-python = ">=3.11"
+# Runtime deps are pinned in requirements.txt (single source of truth for the
+# Docker Space build). This list mirrors the import-level requirements so the
+# package is installable with `pip install -e .` for local dev.
+dependencies = [
+    "torch",
+    "torchvision",
+    "transformers",
+    "Pillow",
+    "numpy",
+    "pandas",
+]
+
+[project.optional-dependencies]
+htr = ["kraken", "doclayout-yolo"]
+rag = ["sentence-transformers", "faiss-cpu"]
+api = ["fastapi", "uvicorn[standard]", "python-multipart"]
+eval = ["jiwer", "evaluate"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+inkference = ["py.typed"]

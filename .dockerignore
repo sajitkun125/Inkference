@@ -1,0 +1,15 @@
+# Keep the Docker build context small — exclude everything heavy/irrelevant.
+data/
+models/
+notebooks/
+info_files/
+projectNotes/
+images/
+design/
+.venv/
+.inkference_data/
+.git/
+**/__pycache__/
+*.egg-info/
+**/__MACOSX/
+*.ipynb
