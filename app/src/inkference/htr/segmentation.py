@@ -1,24 +1,20 @@
-"""Line segmentation.
+"""Line segmentation — Kraken baseline segmentation (`blla`).
 
-Two backends behind one interface:
+Faithful port of notebooks/segmentManualTranscriptionsIntoLinesWithKraken*.ipynb:
+Kraken's bundled baseline model predicts, per line, a **baseline + boundary
+polygon**; we take the polygon, derive a bbox, drop noise boxes (MIN_W/MIN_H),
+sort top-to-bottom by vertical centre, and crop each line **masked to its polygon**
+(dilated by POLY_PAD) so neighbouring ascenders/descenders don't bleed in.
 
-  KrakenSegmenter      Kraken baseline segmentation (+ optional DocLayout-YOLO
-                       content gate, + polygon-masked crops). Ports the knobs and
-                       behaviour documented in info_files/line_segmentation_output.txt.
+The old dependency-light ProjectionSegmenter is disabled — see the commented block
+at the bottom. Kraken is now the only backend.
 
-  ProjectionSegmenter  Dependency-light fallback using a horizontal projection
-                       profile. No Kraken/torch needed. Good enough for clean,
-                       single-column pages and for testing the full pipeline on
-                       free CPU before Kraken is installed.
-
-`get_segmenter("auto")` returns Kraken if importable, else the projection backend.
-
-All heavy imports are lazy so this module imports cleanly with nothing installed.
+Heavy imports (kraken/torch/PIL) are lazy so this module imports with nothing installed.
 """
 from __future__ import annotations
 
 import importlib.util
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
 from ..config import HTRConfig
@@ -31,11 +27,12 @@ if TYPE_CHECKING:  # pragma: no cover
 
 @dataclass
 class LineCrop:
-    """One detected line: its crop plus where it sits on the page."""
+    """One detected line: its polygon-masked crop plus where it sits on the page."""
 
     index: int
     bbox: BBox
     image: "Image.Image"
+    polygon: list[tuple[float, float]] = field(default_factory=list)
 
 
 class Segmenter(Protocol):
@@ -52,142 +49,122 @@ def downscale(page: "Image.Image", max_long_edge: int) -> tuple["Image.Image", f
     if long_edge <= max_long_edge:
         return page, 1.0
     scale = max_long_edge / long_edge
-    new_size = (round(w * scale), round(h * scale))
-    return page.resize(new_size), scale
+    return page.resize((round(w * scale), round(h * scale))), scale
 
 
-def _pad_clip(bbox: BBox, pad_x: int, pad_y: int, w: int, h: int) -> BBox:
-    x0, y0, x1, y1 = bbox
-    return (
-        max(0, x0 - pad_x),
-        max(0, y0 - pad_y),
-        min(w, x1 + pad_x),
-        min(h, y1 + pad_y),
-    )
+def _resolve_device(device: str) -> str:
+    if device != "auto":
+        return device
+    try:
+        import torch
+
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    except Exception:  # pragma: no cover
+        return "cpu"
+
+
+def _boundary_of(line):
+    """A line's boundary polygon as a list of points, across kraken API versions."""
+    b = getattr(line, "boundary", None)
+    if b is None and isinstance(line, dict):
+        b = line.get("boundary")
+    return b
 
 
 # --------------------------------------------------------------------------- #
 # Kraken backend
 # --------------------------------------------------------------------------- #
 class KrakenSegmenter:
-    """Kraken baseline segmentation with polygon-masked crops."""
+    """Kraken baseline segmentation with polygon-masked line crops."""
 
     def __init__(self, cfg: HTRConfig = default_htr) -> None:
         self.cfg = cfg
-        self._model = None  # lazy: kraken's default blla model
+        self.device = _resolve_device(cfg.device)
+        self._seg_model = None
+        self._model_loaded = False
 
     def _ensure_model(self):
-        if self._model is None:
-            from kraken.lib import vgsl  # noqa: F401  (import validates install)
+        """Load Kraken's bundled default baseline model (blla.mlmodel) once.
 
-            # blla.segment loads the bundled default model when model=None, so we
-            # don't need to fetch one explicitly. Kept as a hook for a custom model.
-            self._model = "default"
-        return self._model
+        Falls back to None, in which case blla.segment uses its own default."""
+        if self._model_loaded:
+            return self._seg_model
+        import os
 
-    def segment(self, page: "Image.Image") -> list[LineCrop]:
+        import kraken
+        from kraken.lib import vgsl
+
+        cand = os.path.join(os.path.dirname(kraken.__file__), "blla.mlmodel")
+        if os.path.exists(cand):
+            self._seg_model = vgsl.TorchVGSLModel.load_model(cand)
+        else:
+            self._seg_model = None
+        self._model_loaded = True
+        return self._seg_model
+
+    def _run_blla(self, im):
         from kraken import blla
 
-        from PIL import Image, ImageDraw
+        model = self._ensure_model()
+        # the `device` kwarg exists on newer kraken; fall back gracefully.
+        try:
+            return blla.segment(im, model=model, device=self.device)
+        except TypeError:
+            return blla.segment(im, model=model) if model is not None else blla.segment(im)
 
-        self._ensure_model()
+    def segment(self, page: "Image.Image") -> list[LineCrop]:
+        from PIL import Image, ImageDraw, ImageFilter
+
         rgb = page.convert("RGB")
-        seg = blla.segment(rgb)  # kraken.containers.Segmentation
+        seg = self._run_blla(rgb)
+        lines = getattr(seg, "lines", None)
+        if lines is None and isinstance(seg, dict):
+            lines = seg.get("lines", [])
+        lines = lines or []
 
-        crops: list[LineCrop] = []
-        w, h = rgb.size
-        idx = 0
-        for line in getattr(seg, "lines", []):
-            boundary = list(getattr(line, "boundary", []) or [])
-            if not boundary:
+        W, H = rgb.size
+        cfg = self.cfg
+
+        # 1. polygon -> bbox record, dropping noise boxes (MIN_W / MIN_H).
+        records: list[tuple[BBox, list[tuple[float, float]]]] = []
+        for ln in lines:
+            poly = _boundary_of(ln)
+            if not poly:
                 continue
-            xs = [int(p[0]) for p in boundary]
-            ys = [int(p[1]) for p in boundary]
-            x0, y0, x1, y1 = min(xs), min(ys), max(xs), max(ys)
-            if (x1 - x0) < self.cfg.min_w or (y1 - y0) < self.cfg.min_h:
-                continue  # drop noise boxes (MIN_W / MIN_H)
+            pts = [(float(p[0]), float(p[1])) for p in poly]
+            xs = [p[0] for p in pts]
+            ys = [p[1] for p in pts]
+            bbox = (min(xs), min(ys), max(xs), max(ys))
+            if (bbox[2] - bbox[0]) < cfg.min_w or (bbox[3] - bbox[1]) < cfg.min_h:
+                continue
+            records.append((bbox, pts))
 
-            x0, y0, x1, y1 = _pad_clip((x0, y0, x1, y1), self.cfg.pad_x, self.cfg.pad_y, w, h)
-            crop = rgb.crop((x0, y0, x1, y1))
+        # 2. reading order: top-to-bottom by vertical centre.
+        records.sort(key=lambda r: (r[0][1] + r[0][3]) / 2)
 
-            if self.cfg.mask_to_polygon:
-                # White-out everything outside the line polygon so neighbour
-                # ascenders/descenders don't bleed in (MASK_TO_POLYGON=True).
+        # 3. polygon-masked crop per line (PAD_X/PAD_Y + MaxFilter(POLY_PAD) dilation).
+        crops: list[LineCrop] = []
+        for idx, (bbox, pts) in enumerate(records):
+            x0, y0, x1, y1 = bbox
+            cx0 = max(0, int(x0) - cfg.pad_x)
+            cy0 = max(0, int(y0) - cfg.pad_y)
+            cx1 = min(W, int(x1) + cfg.pad_x)
+            cy1 = min(H, int(y1) + cfg.pad_y)
+            crop = rgb.crop((cx0, cy0, cx1, cy1))
+
+            if cfg.mask_to_polygon:
                 mask = Image.new("L", crop.size, 0)
-                shifted = [(px - x0, py - y0) for px, py in zip(xs, ys)]
-                ImageDraw.Draw(mask).polygon(shifted, fill=255)
+                ImageDraw.Draw(mask).polygon(
+                    [(px - cx0, py - cy0) for px, py in pts], fill=255
+                )
+                if cfg.poly_pad > 0:  # dilate so the line's own strokes aren't clipped
+                    mask = mask.filter(ImageFilter.MaxFilter(cfg.poly_pad * 2 + 1))
                 white = Image.new("RGB", crop.size, (255, 255, 255))
                 crop = Image.composite(crop, white, mask)
 
-            crops.append(LineCrop(index=idx, bbox=(x0, y0, x1, y1), image=crop))
-            idx += 1
-
-        # Kraken returns reading order; sort top-to-bottom as a safety net.
-        crops.sort(key=lambda c: c.bbox[1])
-        for i, c in enumerate(crops):
-            c.index = i
-        return crops
-
-
-# --------------------------------------------------------------------------- #
-# Projection-profile fallback (no Kraken)
-# --------------------------------------------------------------------------- #
-class ProjectionSegmenter:
-    """Find line bands from the horizontal ink-projection profile.
-
-    Binarises the page, sums dark pixels per row, and splits into bands wherever
-    ink rises above a fraction of the row maximum. Simple but robust for clean,
-    single-column manuscript pages; not a replacement for Kraken on dense or
-    multi-column layouts.
-    """
-
-    def __init__(self, cfg: HTRConfig = default_htr) -> None:
-        self.cfg = cfg
-
-    def segment(self, page: "Image.Image") -> list[LineCrop]:
-        import numpy as np
-        from PIL import ImageOps
-
-        gray = ImageOps.grayscale(page)
-        arr = np.asarray(gray, dtype=np.float32)
-        h, w = arr.shape
-        # Ink = dark pixels. Threshold at Otsu-ish midpoint of the histogram.
-        thresh = float(arr.mean()) - 0.4 * float(arr.std())
-        ink = (arr < thresh).astype(np.float32)
-        row_ink = ink.sum(axis=1)
-
-        if row_ink.max() <= 0:
-            return []
-        active = row_ink > (0.04 * row_ink.max())  # rows that carry text
-
-        bands: list[tuple[int, int]] = []
-        start = None
-        for y in range(h):
-            if active[y] and start is None:
-                start = y
-            elif not active[y] and start is not None:
-                bands.append((start, y))
-                start = None
-        if start is not None:
-            bands.append((start, h))
-
-        rgb = page.convert("RGB")
-        crops: list[LineCrop] = []
-        idx = 0
-        for (y0, y1) in bands:
-            if (y1 - y0) < self.cfg.min_h:
-                continue
-            # Trim horizontal extent to the inked columns within this band.
-            band_ink = ink[y0:y1].sum(axis=0)
-            cols = np.where(band_ink > 0)[0]
-            if cols.size == 0:
-                continue
-            x0, x1 = int(cols[0]), int(cols[-1]) + 1
-            if (x1 - x0) < self.cfg.min_w:
-                continue
-            bbox = _pad_clip((x0, y0, x1, y1), self.cfg.pad_x, self.cfg.pad_y, w, h)
-            crops.append(LineCrop(index=idx, bbox=bbox, image=rgb.crop(bbox)))
-            idx += 1
+            crops.append(
+                LineCrop(index=idx, bbox=(cx0, cy0, cx1, cy1), image=crop, polygon=pts)
+            )
         return crops
 
 
@@ -195,11 +172,70 @@ def kraken_available() -> bool:
     return importlib.util.find_spec("kraken") is not None
 
 
-def get_segmenter(name: str = "auto", cfg: HTRConfig = default_htr) -> Segmenter:
-    if name == "kraken":
+def get_segmenter(name: str = "kraken", cfg: HTRConfig = default_htr) -> Segmenter:
+    """Return the Kraken segmenter. The projection fallback is disabled."""
+    if name in ("kraken", "auto"):
+        if not kraken_available():
+            raise ImportError(
+                "Kraken is not installed. Install it (see the note in requirements.txt — "
+                "Kraken pins its own torch, so a dedicated venv is recommended)."
+            )
         return KrakenSegmenter(cfg)
     if name == "projection":
-        return ProjectionSegmenter(cfg)
-    if name == "auto":
-        return KrakenSegmenter(cfg) if kraken_available() else ProjectionSegmenter(cfg)
+        raise ValueError("ProjectionSegmenter is disabled; use the Kraken segmenter.")
     raise ValueError(f"unknown segmenter: {name!r}")
+
+
+# --------------------------------------------------------------------------- #
+# DISABLED — dependency-light projection-profile fallback (kept for reference).
+# Re-enable in get_segmenter() only if you deliberately want a Kraken-free path.
+# --------------------------------------------------------------------------- #
+# class ProjectionSegmenter:
+#     """Find line bands from the horizontal ink-projection profile. Weak on dense
+#     or multi-column layouts — replaced by Kraken baseline segmentation."""
+#
+#     def __init__(self, cfg: HTRConfig = default_htr) -> None:
+#         self.cfg = cfg
+#
+#     def segment(self, page: "Image.Image") -> list[LineCrop]:
+#         import numpy as np
+#         from PIL import ImageOps
+#
+#         gray = ImageOps.grayscale(page)
+#         arr = np.asarray(gray, dtype=np.float32)
+#         h, w = arr.shape
+#         thresh = float(arr.mean()) - 0.4 * float(arr.std())
+#         ink = (arr < thresh).astype(np.float32)
+#         row_ink = ink.sum(axis=1)
+#         if row_ink.max() <= 0:
+#             return []
+#         active = row_ink > (0.04 * row_ink.max())
+#         bands: list[tuple[int, int]] = []
+#         start = None
+#         for y in range(h):
+#             if active[y] and start is None:
+#                 start = y
+#             elif not active[y] and start is not None:
+#                 bands.append((start, y))
+#                 start = None
+#         if start is not None:
+#             bands.append((start, h))
+#         rgb = page.convert("RGB")
+#         crops: list[LineCrop] = []
+#         idx = 0
+#         for (y0, y1) in bands:
+#             if (y1 - y0) < self.cfg.min_h:
+#                 continue
+#             band_ink = ink[y0:y1].sum(axis=0)
+#             cols = np.where(band_ink > 0)[0]
+#             if cols.size == 0:
+#                 continue
+#             x0, x1 = int(cols[0]), int(cols[-1]) + 1
+#             if (x1 - x0) < self.cfg.min_w:
+#                 continue
+#             x0p = max(0, x0 - self.cfg.pad_x); y0p = max(0, y0 - self.cfg.pad_y)
+#             x1p = min(w, x1 + self.cfg.pad_x); y1p = min(h, y1 + self.cfg.pad_y)
+#             crops.append(LineCrop(index=idx, bbox=(x0p, y0p, x1p, y1p),
+#                                   image=rgb.crop((x0p, y0p, x1p, y1p))))
+#             idx += 1
+#         return crops

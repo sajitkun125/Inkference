@@ -1,7 +1,9 @@
 # Python 3.11 or 3.12 recommended
 transformers==5.10.2
-torch==2.12.0
-torchvision==0.27.0
+# torch/torchvision are pinned to what Kraken 7.0.2 requires (it downgraded them
+# from 2.12.0/0.27.0). TrOCR + sentence-transformers verified working on 2.10.
+torch==2.10.0
+torchvision==0.25.0
 Pillow==11.3.0
 numpy==2.4.4
 pandas==3.0.3

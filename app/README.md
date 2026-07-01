@@ -31,3 +31,7 @@ uvicorn inkference.api.main:app --reload # http://127.0.0.1:8000
 See [deploy/README.md](deploy/README.md) for free Hugging Face Space deployment and
 the full environment-variable reference. The build plan and progress log live in
 [../projectNotes/inkference_platform_plan.md](../projectNotes/inkference_platform_plan.md).
+
+## For empty data or seed 
+INKFERENCE_DATA_ROOT=$(pwd)/app/.inkference_data_fresh \
+  uvicorn inkference.api.main:app --port 8000 --log-level debug 2>&1 | tee app/server.log
