@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from ..config import FRONTEND_DIR, rag as rag_cfg
+from ..config import FRONTEND_DIR, htr as htr_cfg, rag as rag_cfg
 from ..rag.answer import answer_question
 from . import services
 
@@ -62,7 +62,8 @@ def _slugify(text: str) -> str:
 # --------------------------------------------------------------------------- #
 @app.get("/api/health")
 def health() -> dict:
-    return {"status": "ok", "llm_provider": rag_cfg.llm_provider,
+    return {"status": "ok", "trocr_model": htr_cfg.trocr_model_id,
+            "llm_provider": rag_cfg.llm_provider,
             "llm_configured": bool(rag_cfg.llm_api_key)}
 
 

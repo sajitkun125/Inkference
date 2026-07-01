@@ -32,6 +32,16 @@ PROJECT_ROOT = Path(os.getenv("INKFERENCE_PROJECT_ROOT", APP_ROOT.parent))
 # Back-compat alias (older modules referenced REPO_ROOT).
 REPO_ROOT = PROJECT_ROOT
 
+# Load .env for local dev (app/.env takes precedence over repo/.env). Real
+# environment variables always win — load_dotenv does not override them.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(APP_ROOT / ".env")
+    load_dotenv(PROJECT_ROOT / ".env")
+except Exception:
+    pass
+
 DATA_ROOT = Path(os.getenv("INKFERENCE_DATA_ROOT", APP_ROOT / ".inkference_data"))
 FRONTEND_DIR = Path(os.getenv("INKFERENCE_FRONTEND_DIR", APP_ROOT / "frontend"))
 TRANSCRIPTIONS_ROOT = Path(
@@ -78,6 +88,16 @@ class HTRConfig:
     low_confidence_threshold: float = field(
         default_factory=lambda: _env_float("HTR_LOW_CONF", 0.60)
     )
+
+    def __post_init__(self) -> None:
+        # If trocr_model_id names a local folder (absolute, CWD-relative, or
+        # PROJECT_ROOT-relative), resolve it to an absolute path so the model
+        # loads regardless of working directory. Otherwise leave it as a Hub id.
+        mid = self.trocr_model_id
+        for candidate in (Path(mid), PROJECT_ROOT / mid):
+            if candidate.exists():
+                self.trocr_model_id = str(candidate.resolve())
+                break
 
 
 @dataclass

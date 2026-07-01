@@ -148,9 +148,23 @@ Same code runs in prod; only the **HTR executor** and **infra** swap out.
   `TRANSCRIPTIONS_ROOT`=`<repo>/transcriptions`, `DATA_ROOT`=`app/.inkference_data`
   (all env-overridable; Docker sets `INKFERENCE_TRANSCRIPTIONS_ROOT=/app/transcriptions`).
 
+### Segmentation: Kraken-only (projection fallback removed)
+- Per user request, `htr/segmentation.py` now uses **Kraken baseline segmentation only**
+  (bundled `blla.mlmodel` → baseline + boundary polygon → polygon-masked crop with
+  `MaxFilter` dilation), faithful to `segmentManualTranscriptionsIntoLinesWithKraken.ipynb`.
+  ProjectionSegmenter is commented out; `get_segmenter` raises if Kraken is missing.
+- **Kraken installed in the main venv** → downgraded **torch 2.12 → 2.10** (+ torchvision
+  0.25, CUDA/lightning ~3 GB). Verified TrOCR (0.994) + embeddings still work. `requirements.txt`
+  torch pins updated to match; `app/deploy/requirements-space.txt` now includes kraken.
+- Verified on a page: Kraken found ~31 lines (baseline polygons follow the cursive), TrOCR
+  ~4 s/line on CPU. Recognition uses fine-tuned `models/trocr_best_from_bentham` (via `app/.env`).
+- ⚠️ **Model swap:** the user replaced the assembled model with `models/trocr_best_from_bentham/`
+  (self-contained: weights + tokenizer + processor). `.env` sets `TROCR_MODEL_ID` to it; config
+  resolves local model paths against PROJECT_ROOT and loads `.env` (python-dotenv).
+
 ### Environment notes
-- venv at `.venv/` (Python 3.11). Installed: torch 2.12 (CUDA), transformers 5.10,
-  sentence-transformers 5.6, faiss-cpu 1.14, fastapi 0.138, PIL, jiwer, numpy, pandas.
-  **Not installed**: `kraken`, `doclayout-yolo` → auto-fallback to ProjectionSegmenter.
+- venv at `.venv/` (Python 3.11). torch **2.10** (CUDA), transformers 5.10, kraken 7.0.2,
+  sentence-transformers 5.6, faiss-cpu 1.14, fastapi 0.138. `doclayout-yolo` still not installed
+  (layout gate optional/off).
 - HF cache has `microsoft/trocr-base-handwritten` and `all-MiniLM-L6-v2` (offline dev works).
-- New deps pinned in root `requirements.txt`; lean runtime set in `app/deploy/requirements-space.txt`.
+- New deps pinned in root `requirements.txt`; runtime set in `app/deploy/requirements-space.txt`.

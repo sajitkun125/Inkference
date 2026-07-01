@@ -1,11 +1,11 @@
-# Lean CPU runtime deps for the free Hugging Face Docker Space.
-# Uses the CPU-only PyTorch wheels (no CUDA) to keep the image small.
-# Kraken/DocLayout-YOLO are intentionally omitted for a reliable free build —
-# the pipeline falls back to the projection segmenter. Add them back (and a GPU)
-# for production-grade segmentation.
---extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.12.0
-torchvision==0.27.0
+# Runtime deps for the Hugging Face Docker Space.
+# Kraken is REQUIRED (it is now the only segmenter). Kraken pins torch 2.10 and
+# pulls its own (CUDA) torch build, so we do NOT force the CPU wheel here — the
+# CUDA build runs fine on a CPU Space, it's just a larger image (~4-5 GB). If image
+# size becomes a problem, build a slim CPU-only variant in a dedicated stage.
+torch==2.10.0
+torchvision==0.25.0
+kraken==7.0.2
 transformers==5.10.2
 accelerate==1.13.0
 sentencepiece==0.2.1
