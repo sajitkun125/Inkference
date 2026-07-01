@@ -1,0 +1,106 @@
+"""Central configuration. All values overridable via environment variables so the
+same code runs on a laptop, a free HF Docker Space, or a GPU prod host."""
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+
+
+def _env_bool(key: str, default: bool) -> bool:
+    val = os.getenv(key)
+    if val is None:
+        return default
+    return val.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_float(key: str, default: float) -> float:
+    val = os.getenv(key)
+    return float(val) if val else default
+
+
+def _env_int(key: str, default: int) -> int:
+    val = os.getenv(key)
+    return int(val) if val else default
+
+
+# Path layout: this file is app/src/inkference/config.py
+#   parents[2] = app/        (APP_ROOT — holds frontend/, deploy/, scripts/)
+#   parents[3] = repo root   (PROJECT_ROOT — holds transcriptions/, models/, data/)
+APP_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(os.getenv("INKFERENCE_PROJECT_ROOT", APP_ROOT.parent))
+# Back-compat alias (older modules referenced REPO_ROOT).
+REPO_ROOT = PROJECT_ROOT
+
+DATA_ROOT = Path(os.getenv("INKFERENCE_DATA_ROOT", APP_ROOT / ".inkference_data"))
+FRONTEND_DIR = Path(os.getenv("INKFERENCE_FRONTEND_DIR", APP_ROOT / "frontend"))
+TRANSCRIPTIONS_ROOT = Path(
+    os.getenv("INKFERENCE_TRANSCRIPTIONS_ROOT", PROJECT_ROOT / "transcriptions")
+)
+
+
+@dataclass
+class HTRConfig:
+    """Knobs ported from info_files/line_segmentation_output.txt plus runtime ones."""
+
+    # Recognition model: a HF Hub id (prod) or a local checkpoint path (dev).
+    trocr_model_id: str = field(
+        default_factory=lambda: os.getenv(
+            "TROCR_MODEL_ID", "microsoft/trocr-base-handwritten"
+        )
+    )
+    # local | remote  (remote = serverless GPU endpoint in production)
+    executor: str = field(default_factory=lambda: os.getenv("HTR_EXECUTOR", "local"))
+    device: str = field(default_factory=lambda: os.getenv("HTR_DEVICE", "auto"))
+
+    # Segmentation knobs (from the notebook config cell).
+    pad_x: int = 6
+    pad_y: int = 2
+    mask_to_polygon: bool = True
+    poly_pad: int = 2
+    min_w: int = 40
+    min_h: int = 12
+    use_layout_filter: bool = field(
+        default_factory=lambda: _env_bool("HTR_USE_LAYOUT_FILTER", False)
+    )
+
+    # Free-CPU survival: cap the long edge before segmentation/recognition.
+    max_page_long_edge: int = field(
+        default_factory=lambda: _env_int("HTR_MAX_LONG_EDGE", 2000)
+    )
+    num_beams: int = field(default_factory=lambda: _env_int("HTR_NUM_BEAMS", 1))
+    max_target_length: int = 128
+    recognition_batch_size: int = field(
+        default_factory=lambda: _env_int("HTR_BATCH_SIZE", 8)
+    )
+
+    # Confidence: words below this are "needs review" (design's <60% flag).
+    low_confidence_threshold: float = field(
+        default_factory=lambda: _env_float("HTR_LOW_CONF", 0.60)
+    )
+
+
+@dataclass
+class RAGConfig:
+    embed_model_id: str = field(
+        default_factory=lambda: os.getenv(
+            "EMBED_MODEL_ID", "sentence-transformers/all-MiniLM-L6-v2"
+        )
+    )
+    top_k: int = field(default_factory=lambda: _env_int("RAG_TOP_K", 5))
+    # Provider for the written answer: gemini | groq | claude | openai
+    llm_provider: str = field(default_factory=lambda: os.getenv("LLM_PROVIDER", "gemini"))
+    llm_model: str = field(default_factory=lambda: os.getenv("LLM_MODEL", ""))
+    llm_api_key: str = field(default_factory=lambda: os.getenv("LLM_API_KEY", ""))
+
+
+@dataclass
+class StoreConfig:
+    db_path: Path = field(default_factory=lambda: DATA_ROOT / "inkference.db")
+    assets_dir: Path = field(default_factory=lambda: DATA_ROOT / "assets")
+    index_dir: Path = field(default_factory=lambda: DATA_ROOT / "index")
+
+
+htr = HTRConfig()
+rag = RAGConfig()
+store = StoreConfig()
