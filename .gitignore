@@ -136,4 +136,10 @@ dmypy.json
 .vscode
 
 # Data 
-data/
+/data
+
+#models
+/models
+
+#checkpoints
+/checkpoints
