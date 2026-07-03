@@ -21,6 +21,7 @@ _STAGE_STATUS = {
     Stage.SEGMENTATION: JobStatus.SEGMENTING,
     Stage.RECOGNITION: JobStatus.RECOGNIZING,
     Stage.CONFIDENCE: JobStatus.SCORING,
+    Stage.CORRECTION: JobStatus.CORRECTING,
 }
 
 _store: DocumentStore | None = None

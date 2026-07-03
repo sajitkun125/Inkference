@@ -14,11 +14,12 @@ BBox = tuple[int, int, int, int]  # (x0, y0, x1, y1)
 
 
 class Stage(str, Enum):
-    """The three pipeline stages shown in the design's stepper."""
+    """The pipeline stages shown in the design's stepper."""
 
     SEGMENTATION = "segmentation"
     RECOGNITION = "recognition"
     CONFIDENCE = "confidence"
+    CORRECTION = "correction"  # optional Qwen post-correction stage
 
 
 class JobStatus(str, Enum):
@@ -26,6 +27,7 @@ class JobStatus(str, Enum):
     SEGMENTING = "segmenting"
     RECOGNIZING = "recognizing"
     SCORING = "scoring"
+    CORRECTING = "correcting"
     COMPLETE = "complete"
     FAILED = "failed"
 
@@ -35,6 +37,7 @@ class Word:
     text: str
     confidence: float  # 0..1 mean token probability for this word
     needs_review: bool = False  # set by the pipeline using the low-conf threshold
+    qwen_replaced: bool = False  # set on corrected words the LLM changed
 
 
 @dataclass
@@ -45,6 +48,9 @@ class Line:
     confidence: float  # mean token probability across the line
     words: list[Word] = field(default_factory=list)
     needs_review: bool = False
+    # Populated by the post-correction stage (None/empty when correction is off).
+    corrected_text: str | None = None
+    corrected_words: list[Word] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -64,6 +70,18 @@ class PageResult:
         return "\n".join(line.text for line in self.lines)
 
     @property
+    def corrected(self) -> str:
+        """Corrected page text (per-line corrected where available, else raw)."""
+        return "\n".join(
+            (line.corrected_text if line.corrected_text is not None else line.text)
+            for line in self.lines
+        )
+
+    @property
+    def has_correction(self) -> bool:
+        return any(line.corrected_text is not None for line in self.lines)
+
+    @property
     def avg_confidence(self) -> float:
         confs = [w.confidence for line in self.lines for w in line.words]
         return sum(confs) / len(confs) if confs else 0.0
@@ -75,6 +93,8 @@ class PageResult:
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["text"] = self.text
+        d["corrected"] = self.corrected
+        d["has_correction"] = self.has_correction
         d["avg_confidence"] = self.avg_confidence
         d["low_confidence_word_count"] = self.low_confidence_word_count
         return d

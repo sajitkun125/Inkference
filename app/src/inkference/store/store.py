@@ -8,6 +8,7 @@ the DB holds paths and structured transcription data.
 from __future__ import annotations
 
 import datetime as _dt
+import json
 import sqlite3
 from pathlib import Path
 from typing import Any, Iterator
@@ -35,16 +36,20 @@ CREATE TABLE IF NOT EXISTS pages (
     status         TEXT NOT NULL DEFAULT 'queued',
     avg_confidence REAL,
     low_conf_words INTEGER,
+    corrected_text TEXT,
+    corrected_lines TEXT,   -- JSON: page-level corrected display lines (words w/ qwen_replaced)
     UNIQUE(document_id, page_number)
 );
 CREATE TABLE IF NOT EXISTS lines (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    page_id      INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
-    idx          INTEGER NOT NULL,
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    page_id        INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+    idx            INTEGER NOT NULL,
     x0 INTEGER, y0 INTEGER, x1 INTEGER, y1 INTEGER,
-    text         TEXT,
-    confidence   REAL,
-    needs_review INTEGER DEFAULT 0
+    text           TEXT,
+    confidence     REAL,
+    needs_review   INTEGER DEFAULT 0,
+    corrected_text TEXT,
+    corrected_words TEXT   -- JSON: [{text,confidence,needs_review,qwen_replaced}]
 );
 CREATE TABLE IF NOT EXISTS words (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -96,6 +101,23 @@ class DocumentStore:
     def _init_schema(self) -> None:
         with self._connect() as conn:
             conn.executescript(_SCHEMA)
+            self._migrate(conn)
+
+    def _migrate(self, conn: sqlite3.Connection) -> None:
+        """Add post-correction columns to DBs created before the feature existed."""
+        def cols(table: str) -> set[str]:
+            return {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+
+        page_cols = cols("pages")
+        if "corrected_text" not in page_cols:
+            conn.execute("ALTER TABLE pages ADD COLUMN corrected_text TEXT")
+        if "corrected_lines" not in page_cols:
+            conn.execute("ALTER TABLE pages ADD COLUMN corrected_lines TEXT")
+        line_cols = cols("lines")
+        if "corrected_text" not in line_cols:
+            conn.execute("ALTER TABLE lines ADD COLUMN corrected_text TEXT")
+        if "corrected_words" not in line_cols:
+            conn.execute("ALTER TABLE lines ADD COLUMN corrected_words TEXT")
 
     # -- documents ---------------------------------------------------------- #
     def create_document(self, title: str, slug: str, subtitle: str | None = None) -> int:
@@ -167,19 +189,67 @@ class DocumentStore:
         with self._connect() as conn:
             conn.execute(
                 """UPDATE pages SET width=?,height=?,scale=?,status='complete',
-                          avg_confidence=?,low_conf_words=? WHERE id=?""",
+                          avg_confidence=?,low_conf_words=?,corrected_text=? WHERE id=?""",
                 (
                     result.image_width,
                     result.image_height,
                     result.scale,
                     result.avg_confidence,
                     result.low_confidence_word_count,
+                    result.corrected if result.has_correction else None,
                     page_id,
                 ),
             )
             # Replace any prior lines/words for idempotent re-ingest.
             conn.execute("DELETE FROM lines WHERE page_id=?", (page_id,))
             for line in result.lines:
+                x0, y0, x1, y1 = line.bbox
+                corrected_words_json = (
+                    json.dumps([
+                        {"text": w.text, "confidence": w.confidence,
+                         "needs_review": w.needs_review, "qwen_replaced": w.qwen_replaced}
+                        for w in line.corrected_words
+                    ]) if line.corrected_words else None
+                )
+                cur = conn.execute(
+                    """INSERT INTO lines(page_id,idx,x0,y0,x1,y1,text,confidence,needs_review,
+                                         corrected_text,corrected_words)
+                       VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                    (page_id, line.index, x0, y0, x1, y1, line.text,
+                     line.confidence, int(line.needs_review),
+                     line.corrected_text, corrected_words_json),
+                )
+                line_id = cur.lastrowid
+                conn.executemany(
+                    """INSERT INTO words(line_id,idx,text,confidence,needs_review)
+                       VALUES(?,?,?,?,?)""",
+                    [(line_id, i, w.text, w.confidence, int(w.needs_review))
+                     for i, w in enumerate(line.words)],
+                )
+
+    def save_full_page(self, page_id: int, width: int, height: int,
+                       raw_lines: list[Line], corrected_lines: list[list["Word"]],
+                       corrected_text: str, scale: float = 1.0) -> None:
+        """Persist a preseeded page whose raw and corrected texts have DIFFERENT
+        line structures: raw lines go in the lines table (Raw view); the corrected
+        display lines (page-level word alignment) are stored as page JSON."""
+        confs = [w.confidence for ln in raw_lines for w in ln.words]
+        avg = sum(confs) / len(confs) if confs else 0.0
+        low = sum(1 for ln in raw_lines for w in ln.words if w.needs_review)
+        cl_json = json.dumps([
+            [{"text": w.text, "confidence": w.confidence,
+              "needs_review": w.needs_review, "qwen_replaced": w.qwen_replaced} for w in line]
+            for line in corrected_lines
+        ])
+        with self._connect() as conn:
+            conn.execute(
+                """UPDATE pages SET width=?,height=?,scale=?,status='complete',
+                          avg_confidence=?,low_conf_words=?,corrected_text=?,corrected_lines=?
+                   WHERE id=?""",
+                (width, height, scale, avg, low, corrected_text, cl_json, page_id),
+            )
+            conn.execute("DELETE FROM lines WHERE page_id=?", (page_id,))
+            for line in raw_lines:
                 x0, y0, x1, y1 = line.bbox
                 cur = conn.execute(
                     """INSERT INTO lines(page_id,idx,x0,y0,x1,y1,text,confidence,needs_review)
@@ -189,8 +259,7 @@ class DocumentStore:
                 )
                 line_id = cur.lastrowid
                 conn.executemany(
-                    """INSERT INTO words(line_id,idx,text,confidence,needs_review)
-                       VALUES(?,?,?,?,?)""",
+                    "INSERT INTO words(line_id,idx,text,confidence,needs_review) VALUES(?,?,?,?,?)",
                     [(line_id, i, w.text, w.confidence, int(w.needs_review))
                      for i, w in enumerate(line.words)],
                 )
@@ -216,9 +285,15 @@ class DocumentStore:
                     (ln["id"],),
                 ).fetchall()
                 ln["words"] = [dict(w) for w in words]
+                ln["corrected_words"] = (
+                    json.loads(ln["corrected_words"]) if ln.get("corrected_words") else []
+                )
                 ln["bbox"] = [ln.pop("x0"), ln.pop("y0"), ln.pop("x1"), ln.pop("y1")]
                 out_lines.append(ln)
             page["lines"] = out_lines
+            page["corrected_lines"] = (
+                json.loads(page["corrected_lines"]) if page.get("corrected_lines") else []
+            )
             return page
 
     def get_page_image_path(self, doc_id: int, page_number: int) -> str | None:
@@ -229,14 +304,23 @@ class DocumentStore:
             ).fetchone()
             return row["image_path"] if row and row["image_path"] else None
 
-    def iter_pages_text(self, doc_id: int) -> Iterator[tuple[int, str]]:
-        """(page_number, full_text) for completed pages — feeds RAG indexing."""
+    def iter_pages_text(
+        self, doc_id: int, prefer_corrected: bool = True
+    ) -> Iterator[tuple[int, str]]:
+        """(page_number, full_text) for completed pages — feeds RAG indexing.
+
+        When prefer_corrected, use the page's Qwen-corrected text if present, so
+        retrieval and answers run over the cleaned transcription."""
         with self._connect() as conn:
             pages = conn.execute(
-                "SELECT id,page_number FROM pages WHERE document_id=? AND status='complete' ORDER BY page_number",
+                "SELECT id,page_number,corrected_text FROM pages "
+                "WHERE document_id=? AND status='complete' ORDER BY page_number",
                 (doc_id,),
             ).fetchall()
             for p in pages:
+                if prefer_corrected and p["corrected_text"]:
+                    yield int(p["page_number"]), p["corrected_text"]
+                    continue
                 rows = conn.execute(
                     "SELECT text FROM lines WHERE page_id=? ORDER BY idx", (p["id"],)
                 ).fetchall()
