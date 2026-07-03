@@ -127,7 +127,14 @@ body {
 .transcription .t-line { margin-bottom: 4px; }
 .transcription .t-line.review { background: rgba(255,206,120,.13); border-radius: 3px; }
 .transcription w { display: inline; }   /* confidence-tinted word, color set inline */
+.transcription w.qwen { color: #1a8c1a; }  /* Qwen-corrected word (matches v2 notebook) */
 .transcription .empty { color: var(--muted); font-style: italic; font-size: 16px; }
+
+/* Raw / Corrected toggle in the Reader header */
+.header-right { display: flex; align-items: center; gap: 18px; }
+.view-toggle { display: inline-flex; border: 1px solid #ddd0b8; border-radius: 8px; overflow: hidden; }
+.toggle-opt { font-size: 12px; padding: 5px 11px; cursor: pointer; color: #8a7765; background: #fff; }
+.toggle-opt.active { background: var(--accent); color: #f6ead8; }
 
 /* ===== Ask the Archive ===== */
 #view-ask { justify-content: center; }

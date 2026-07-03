@@ -1,0 +1,17 @@
+{
+  "_note": "Few-shot exemplars for Qwen page-level OCR post-correction. 'raw' = real fine-tuned-TrOCR output (low-confidence words wrapped <<...>>), 'corrected' = verified ground-truth for the same lines. Bootstrapped from transcriptions/ line crops. Same #lines in raw/corrected.",
+  "examples": [
+    {
+      "raw": "Journal of the\nNov. ye 23� <<.>> After having eaten our dinner\nat Mr Brand's, we took leave of his Family &\nwent on board the Resolution; We immediately",
+      "corrected": "Journal of the\nNov. ye 23⁹ 1772 . After having eaten our dinner\nat Mr Brand's, we took leave of his Family &\nwent on board the Resolution; We immediately"
+    },
+    {
+      "raw": "8)From the Cape towards the South. Nov.-y� 30\nbut the cold air in the morning together with\nthe dampness of my bed & of the whole body\ncaused some stifness in my limbs; which",
+      "corrected": "8)From the Cape towards the South. Nov.-y⁰ 30\nbut the cold air in the morning together with\nthe dampness of my bed & of the whole body\ncaused some stifness in my limbs; which"
+    },
+    {
+      "raw": "I had been obliged to climb up the freepest\nprecipices, often up to the Ancles in\nmud, &-through briars & thorns. My little\nbottle was broke from two hard falls I",
+      "corrected": "I had been obliged to climb up the freepest\nprecipices, often up to the Ancles in\nmud, &-through briars & thorns. My little\nbottle was broke from two hard falls I"
+    }
+  ]
+}

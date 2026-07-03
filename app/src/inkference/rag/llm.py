@@ -7,11 +7,28 @@ the app still works at $0 and offline.
 """
 from __future__ import annotations
 
+import time
+
 from ..config import RAGConfig
 from ..config import rag as default_rag
 
+
+def _post_retry(url: str, retries: int = 3, **kwargs):
+    """POST that retries transient 429/503 (rate limit / overload) with backoff."""
+    import requests
+
+    last = None
+    for attempt in range(retries):
+        last = requests.post(url, **kwargs)
+        if last.status_code in (429, 503) and attempt < retries - 1:
+            wait = float(last.headers.get("retry-after", 2 ** attempt))
+            time.sleep(min(wait, 20))
+            continue
+        return last
+    return last
+
 _DEFAULT_MODELS = {
-    "gemini": "gemini-1.5-flash",
+    "gemini": "gemini-2.5-flash",
     "groq": "llama-3.3-70b-versatile",
     "openai": "gpt-4o-mini",
     "claude": "claude-haiku-4-5-20251001",
@@ -71,8 +88,6 @@ def generate_answer(
 # provider calls
 # --------------------------------------------------------------------------- #
 def _call_gemini(model: str, prompt: str, api_key: str) -> str:
-    import requests
-
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
         f"?key={api_key}"
@@ -81,16 +96,14 @@ def _call_gemini(model: str, prompt: str, api_key: str) -> str:
         "system_instruction": {"parts": [{"text": _SYSTEM}]},
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
     }
-    r = requests.post(url, json=body, timeout=60)
+    r = _post_retry(url, json=body, timeout=60)
     r.raise_for_status()
     return r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
 
 
 def _call_openai_compatible(provider: str, model: str, prompt: str, api_key: str) -> str:
-    import requests
-
     base = "https://api.groq.com/openai/v1" if provider == "groq" else "https://api.openai.com/v1"
-    r = requests.post(
+    r = _post_retry(
         f"{base}/chat/completions",
         headers={"Authorization": f"Bearer {api_key}"},
         json={
