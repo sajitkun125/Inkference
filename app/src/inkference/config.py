@@ -113,6 +113,22 @@ class RAGConfig:
     llm_model: str = field(default_factory=lambda: os.getenv("LLM_MODEL", ""))
     llm_api_key: str = field(default_factory=lambda: os.getenv("LLM_API_KEY", ""))
 
+    _PROVIDER_KEYS = {
+        "gemini": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
+        "groq": ("GROQ_API_KEY",),
+        "openai": ("OPENAI_API_KEY",),
+        "claude": ("ANTHROPIC_API_KEY",),
+    }
+
+    def __post_init__(self) -> None:
+        # If no explicit LLM_API_KEY, pull the key for the SELECTED provider so a
+        # provider switch (e.g. gemini -> groq) uses the right key automatically.
+        if not self.llm_api_key:
+            for env in self._PROVIDER_KEYS.get((self.llm_provider or "").lower(), ()):
+                if os.getenv(env):
+                    self.llm_api_key = os.getenv(env)
+                    break
+
 
 @dataclass
 class StoreConfig:
@@ -121,6 +137,51 @@ class StoreConfig:
     index_dir: Path = field(default_factory=lambda: DATA_ROOT / "index")
 
 
+@dataclass
+class CorrectionConfig:
+    """Qwen few-shot page-level post-correction (runs after recognition)."""
+
+    enabled: bool = field(default_factory=lambda: _env_bool("CORRECTION_ENABLED", True))
+    # backend: local (transformers) | api (OpenAI-compatible hosted Qwen)
+    backend: str = field(default_factory=lambda: os.getenv("CORRECTION_BACKEND", "local"))
+    # local: a CPU-friendly Qwen3 by default; use Qwen/Qwen3-4B on a GPU.
+    model_id: str = field(
+        default_factory=lambda: os.getenv("CORRECTION_MODEL_ID", "Qwen/Qwen3-1.7B")
+    )
+    device: str = field(default_factory=lambda: os.getenv("CORRECTION_DEVICE", "auto"))
+    # api backend (hosted Qwen via Groq/OpenRouter/DashScope/etc.)
+    api_base: str = field(default_factory=lambda: os.getenv("CORRECTION_API_BASE", ""))
+    # falls back to GROQ_API_KEY / OPENROUTER_API_KEY so an existing key just works
+    api_key: str = field(
+        default_factory=lambda: (
+            os.getenv("CORRECTION_API_KEY")
+            or os.getenv("GROQ_API_KEY")
+            or os.getenv("OPENROUTER_API_KEY")
+            or ""
+        )
+    )
+    api_model: str = field(
+        default_factory=lambda: os.getenv("CORRECTION_API_MODEL", "qwen/qwen3-32b")
+    )
+    # few-shot
+    num_shots: int = field(default_factory=lambda: _env_int("CORRECTION_NUM_SHOTS", 2))
+    examples_path: Path = field(
+        default_factory=lambda: Path(
+            os.getenv(
+                "CORRECTION_EXAMPLES",
+                str(Path(__file__).resolve().parent / "htr" / "few_shot_examples.json"),
+            )
+        )
+    )
+    max_new_tokens: int = field(
+        default_factory=lambda: _env_int("CORRECTION_MAX_NEW_TOKENS", 2048)
+    )
+    temperature: float = field(
+        default_factory=lambda: _env_float("CORRECTION_TEMPERATURE", 0.2)
+    )
+
+
 htr = HTRConfig()
 rag = RAGConfig()
 store = StoreConfig()
+correction = CorrectionConfig()

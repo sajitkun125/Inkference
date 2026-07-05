@@ -54,9 +54,15 @@
           <div class="paper-title">Transcription</div>
           <div class="muted" id="trans-sub">Machine reading</div>
         </div>
-        <div class="conf-readout">
-          <div class="conf-pct"><span id="avg-conf">–</span><span class="pct">%</span></div>
-          <div class="conf-label">avg. confidence</div>
+        <div class="header-right">
+          <div class="view-toggle" id="view-toggle" style="display:none">
+            <span class="toggle-opt" data-view="raw">Raw</span>
+            <span class="toggle-opt active" data-view="corrected">Corrected</span>
+          </div>
+          <div class="conf-readout">
+            <div class="conf-pct"><span id="avg-conf">–</span><span class="pct">%</span></div>
+            <div class="conf-label">avg. confidence</div>
+          </div>
         </div>
       </div>
       <div class="legend">
@@ -87,7 +93,7 @@
           <input id="ask-input" placeholder="Ask anything about this document…" />
           <button id="ask-send" class="send-btn">↑</button>
         </div>
-        <div class="disclaimer muted">Palimpsest can make mistakes. Verify answers against the cited pages.</div>
+        <div class="disclaimer muted">Inkference can make mistakes. Verify answers against the cited pages.</div>
       </div>
     </div>
   </main>
@@ -120,7 +126,7 @@
         </div>
         <div class="model-card">
           <div class="model-name"><span class="dot"></span><span id="model-name">Fine-tuned TrOCR</span></div>
-          <div class="muted small" id="model-meta">Segmentation → Recognition → Confidence</div>
+          <div class="muted small" id="model-meta">Segmentation → Recognition → Confidence → Correction</div>
         </div>
       </div>
       <div class="stepper" id="stepper">
@@ -129,6 +135,8 @@
         <div class="step" data-stage="recognition"><span class="step-dot">2</span> Recognition</div>
         <div class="step-line"></div>
         <div class="step" data-stage="confidence"><span class="step-dot">3</span> Confidence</div>
+        <div class="step-line"></div>
+        <div class="step" data-stage="correction"><span class="step-dot">4</span> Correction</div>
       </div>
       <div class="queue" id="queue"></div>
       <div class="upload-footer">

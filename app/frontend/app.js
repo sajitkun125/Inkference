@@ -2,7 +2,7 @@
    (override with window.INKFERENCE_API for a separately-hosted backend). */
 const API = (window.INKFERENCE_API || "") + "/api";
 
-const state = { doc: null, page: 1, totalPages: 0 };
+const state = { doc: null, page: 1, totalPages: 0, pageData: null, readerView: null };
 
 /* ---------- helpers ---------- */
 const $ = (sel) => document.querySelector(sel);
@@ -78,29 +78,70 @@ async function loadPage(n) {
   const low = page.low_conf_words || 0;
   $("#lowconf-count").textContent = low ? `${low} word${low > 1 ? "s" : ""} below 60%` : "";
 
-  // transcription with per-word confidence tint
+  // remember page; show the Raw/Corrected toggle only when correction exists
+  state.pageData = page;
+  // correction present if page-level corrected_lines OR any per-line corrected_words
+  const hasCorrection = (page.corrected_lines && page.corrected_lines.length) ||
+    page.lines.some((l) => l.corrected_words && l.corrected_words.length);
+  $("#view-toggle").style.display = hasCorrection ? "inline-flex" : "none";
+  if (hasCorrection && state.readerView == null) state.readerView = "corrected";
+  renderTranscription();
+}
+
+/* build a line <div> of confidence-tinted words (green when Qwen-corrected) */
+function renderWordLine(words, flagReview) {
+  const div = el("div", "t-line" + (flagReview ? " review" : ""));
+  words.forEach((w) => {
+    const span = el("w");
+    span.textContent = w.text;
+    if (w.qwen_replaced) {
+      span.className = "qwen";
+      span.title = `Qwen correction (orig conf ${Math.round(w.confidence * 100)}%)`;
+    } else {
+      span.style.color = confColor(w.confidence);
+      if (w.needs_review) span.title = `low confidence (${Math.round(w.confidence * 100)}%)`;
+    }
+    div.appendChild(span);
+    div.appendChild(document.createTextNode(" "));
+  });
+  return div;
+}
+
+function renderTranscription() {
+  const page = state.pageData;
+  if (!page) return;
+  const corrected = state.readerView === "corrected";
+  document.querySelectorAll(".toggle-opt").forEach((o) =>
+    o.classList.toggle("active", o.dataset.view === (corrected ? "corrected" : "raw")));
+
   const box = $("#transcription");
   box.innerHTML = "";
+
+  // Corrected view: prefer page-level corrected_lines (preseed), else per-line corrected_words.
+  if (corrected && page.corrected_lines && page.corrected_lines.length) {
+    page.corrected_lines.forEach((words) => box.appendChild(renderWordLine(words, false)));
+    return;
+  }
   if (!page.lines.length) { box.innerHTML = '<div class="empty">No transcription for this page.</div>'; return; }
   for (const line of page.lines) {
-    const div = el("div", "t-line" + (line.needs_review ? " review" : ""));
-    if (line.words && line.words.length) {
-      line.words.forEach((w) => {
-        const span = el("w");
-        span.textContent = w.text;
-        span.style.color = confColor(w.confidence);
-        if (w.needs_review) span.title = `low confidence (${Math.round(w.confidence * 100)}%)`;
-        div.appendChild(span);
-        div.appendChild(document.createTextNode(" "));
-      });
+    const words = corrected && line.corrected_words && line.corrected_words.length
+      ? line.corrected_words : line.words;
+    if (words && words.length) {
+      box.appendChild(renderWordLine(words, line.needs_review && !corrected));
     } else {
-      div.textContent = line.text;
+      const div = el("div", "t-line");
+      div.textContent = corrected && line.corrected_text != null ? line.corrected_text : line.text;
+      box.appendChild(div);
     }
-    box.appendChild(div);
   }
 }
 $("#prev-page").addEventListener("click", () => loadPage(state.page - 1));
 $("#next-page").addEventListener("click", () => loadPage(state.page + 1));
+$("#view-toggle").addEventListener("click", (e) => {
+  if (!e.target.dataset.view) return;
+  state.readerView = e.target.dataset.view;
+  renderTranscription();
+});
 
 /* ---------- Ask the Archive ---------- */
 async function ask(question) {
@@ -109,8 +150,8 @@ async function ask(question) {
   const q = el("div", "bubble-q"); q.textContent = question; thread.appendChild(q);
 
   const ans = el("div", "answer");
-  ans.innerHTML = `<div class="answer-head"><div class="answer-mark">P</div>
-    <span class="answer-who">Palimpsest</span></div>
+  ans.innerHTML = `<div class="answer-head"><div class="answer-mark">I</div>
+    <span class="answer-who">Inkference</span></div>
     <div class="answer-body">…thinking…</div>`;
   thread.appendChild(ans);
   thread.scrollTop = thread.scrollHeight;
@@ -148,7 +189,7 @@ dz.addEventListener("drop", (e) => handleFiles(e.dataTransfer.files));
 $("#file-input").addEventListener("change", (e) => handleFiles(e.target.files));
 
 function setStep(stage) {
-  const order = ["segmentation", "recognition", "confidence"];
+  const order = ["segmentation", "recognition", "confidence", "correction"];
   const idx = order.indexOf(stage);
   document.querySelectorAll(".step").forEach((s) => {
     const i = order.indexOf(s.dataset.stage);
@@ -213,6 +254,7 @@ async function pollJob(jobId, rows, total) {
         const frac = ((job.progress || 0) * total) - done;
         bar.style.width = Math.max(5, Math.min(100, frac * 100)) + "%";
         st.textContent = job.status === "recognizing" ? "Recognizing" :
+                         job.status === "correcting" ? "Correcting" :
                          job.status === "scoring" ? "Scoring" : "Segmenting";
       }
     });
