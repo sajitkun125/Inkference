@@ -36,15 +36,19 @@ ENV INKFERENCE_DATA_ROOT=/data \
     TROCR_MODEL_ID=microsoft/trocr-base-handwritten \
     HTR_MAX_LONG_EDGE=1600 \
     HTR_NUM_BEAMS=1 \
+    INKFERENCE_LOG_LEVEL=INFO \
     # --- post-correction via Groq (GROQ_API_KEY is a Space secret) ---
     CORRECTION_ENABLED=true \
     CORRECTION_BACKEND=api \
     CORRECTION_API_BASE=https://api.groq.com/openai/v1 \
     CORRECTION_API_MODEL=qwen/qwen3-32b \
-    # --- Ask-the-Archive via Gemini (GEMINI_API_KEY is a Space secret) ---
-    LLM_PROVIDER=gemini \
-    LLM_MODEL=gemini-2.5-flash
-# Set as Space secrets (Settings -> Variables and secrets): GEMINI_API_KEY, GROQ_API_KEY.
+    # --- Ask-the-Archive: Groq gpt-oss-120b -> Gemini fallback -> extractive ---
+    LLM_PROVIDER=groq \
+    LLM_MODEL=openai/gpt-oss-120b \
+    LLM_FALLBACK=gemini:gemini-2.5-flash-lite
+# Set as Space secrets (Settings -> Variables and secrets):
+#   GROQ_API_KEY   -> post-correction AND primary RAG answers
+#   GEMINI_API_KEY -> RAG fallback when Groq is rate-limited/unavailable
 # To use your fine-tuned recognizer, push it to the Hub and set TROCR_MODEL_ID=<user>/inkference-trocr.
 
 USER user
