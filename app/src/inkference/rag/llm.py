@@ -7,10 +7,21 @@ the app still works at $0 and offline.
 """
 from __future__ import annotations
 
+import logging
+import re
 import time
 
 from ..config import RAGConfig
 from ..config import rag as default_rag
+
+logger = logging.getLogger("inkference.rag")
+
+# Strip secrets before anything is logged (Gemini puts ?key= in the URL; bearer tokens too).
+_SECRET_RE = re.compile(r"(key=)[\w.\-]+|(AIza[\w\-]{20,})|(gsk_[A-Za-z0-9]{20,})|(Bearer\s+\S+)")
+
+
+def _redact(text: str) -> str:
+    return _SECRET_RE.sub("\\1***", str(text))
 
 
 def _post_retry(url: str, retries: int = 3, **kwargs):
@@ -41,6 +52,23 @@ _SYSTEM = (
     "Do not invent facts. Write 2–4 sentences in a clear, scholarly tone."
 )
 
+# In-character persona: answer AS Captain Cook, still grounded in the excerpts.
+_SYSTEM_COOK = (
+    "You are Johann Reinhold Forster, the naturalist aboard HMS Resolution during "
+    "Captain Cook's second voyage and the author of this journal (Books 1-6, "
+    "transcribed from your own handwriting). Answer the reader's question in the "
+    "first person, as yourself, drawing ONLY on the provided excerpts from your own "
+    "journal as your memory of the voyage — do not break character and do not refer "
+    "to yourself as an AI or assistant. Write in a reflective, learned 18th-century "
+    "voice, but keep the language clear for a modern reader. If your journal "
+    "excerpts do not cover the question, say so honestly as yourself rather than "
+    "inventing facts. Write 2-4 sentences."
+)
+
+
+def _system_for(persona: str | None) -> str:
+    return _SYSTEM_COOK if (persona or "").lower() == "cook" else _SYSTEM
+
 
 def _build_prompt(question: str, contexts: list[tuple[int, str]]) -> str:
     blocks = "\n\n".join(f"[Page {pn}]\n{txt}" for pn, txt in contexts)
@@ -57,43 +85,77 @@ def _extractive_fallback(question: str, contexts: list[tuple[int, str]]) -> str:
     top = contexts[0][1].replace("\n", " ").strip()
     pages = ", ".join(str(pn) for pn, _ in contexts)
     return (
-        f"(No language model configured — showing the most relevant transcribed "
-        f"passage from page{'s' if ',' in pages else ''} {pages}.)\n\n“{top}”"
+        f"Showing the most relevant transcribed passage from "
+        f"page{'s' if ',' in pages else ''} {pages}:\n\n“{top}”"
     )
 
 
-def generate_answer(
-    question: str, contexts: list[tuple[int, str]], cfg: RAGConfig = default_rag
-) -> str:
-    """contexts = [(page_number, text), ...] in relevance order."""
-    provider = (cfg.llm_provider or "").lower()
-    if not cfg.llm_api_key or provider not in _DEFAULT_MODELS:
-        return _extractive_fallback(question, contexts)
+def _dispatch(provider: str, model: str, system: str, prompt: str, key: str) -> str:
+    if provider == "gemini":
+        return _call_gemini(model, system, prompt, key)
+    if provider in ("groq", "openai"):
+        return _call_openai_compatible(provider, model, system, prompt, key)
+    if provider == "claude":
+        return _call_claude(model, system, prompt, key)
+    raise ValueError(f"unknown provider: {provider!r}")
 
-    model = cfg.llm_model or _DEFAULT_MODELS[provider]
+
+def generate_answer(
+    question: str, contexts: list[tuple[int, str]], cfg: RAGConfig = default_rag,
+    persona: str | None = None,
+) -> str:
+    """contexts = [(page_number, text), ...] in relevance order.
+
+    Tries the provider chain (primary -> fallbacks from cfg.attempts()); on a
+    provider error/rate-limit it moves to the next, and if all fail returns the
+    extractive fallback. persona="cook" answers in Captain Cook's voice."""
+    system = _system_for(persona)
     prompt = _build_prompt(question, contexts)
-    try:
-        if provider == "gemini":
-            return _call_gemini(model, prompt, cfg.llm_api_key)
-        if provider in ("groq", "openai"):
-            return _call_openai_compatible(provider, model, prompt, cfg.llm_api_key)
-        if provider == "claude":
-            return _call_claude(model, prompt, cfg.llm_api_key)
-    except Exception as exc:  # network/quota/etc — degrade gracefully
-        return _extractive_fallback(question, contexts) + f"\n\n[generation error: {exc}]"
+
+    seen: set[tuple[str, str]] = set()
+    tried_any = False
+    for provider, model in cfg.attempts():
+        if provider not in _DEFAULT_MODELS:
+            logger.debug("skip unknown provider %r", provider)
+            continue
+        model = model or _DEFAULT_MODELS[provider]
+        if (provider, model) in seen:
+            continue
+        seen.add((provider, model))
+        key = cfg.key_for(provider)
+        if not key:
+            logger.debug("skip %s:%s (no API key configured)", provider, model)
+            continue
+        tried_any = True
+        logger.info("RAG answering via %s:%s%s", provider, model,
+                    f" (persona={persona})" if persona else "")
+        try:
+            answer = _dispatch(provider, model, system, prompt, key)
+            logger.info("RAG answer OK via %s:%s (%d chars)", provider, model, len(answer))
+            return answer
+        except Exception as exc:  # rate limit / network / quota -> try next provider
+            # Redacted: never let the API key (in ?key= / bearer) reach the logs.
+            logger.warning("RAG provider %s:%s failed, falling back: %s",
+                           provider, model, _redact(exc))
+
+    # Client never sees provider errors/keys — only the clean extractive passage.
+    if tried_any:
+        logger.warning("RAG all providers failed; using extractive fallback")
+    else:
+        logger.info("RAG no LLM configured; using extractive fallback")
     return _extractive_fallback(question, contexts)
 
 
 # --------------------------------------------------------------------------- #
 # provider calls
 # --------------------------------------------------------------------------- #
-def _call_gemini(model: str, prompt: str, api_key: str) -> str:
+def _call_gemini(model: str, system: str, prompt: str, api_key: str) -> str:
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
         f"?key={api_key}"
     )
     body = {
-        "system_instruction": {"parts": [{"text": _SYSTEM}]},
+        "system_instruction": {"parts": [{"text": system}]},
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
     }
     r = _post_retry(url, json=body, timeout=60)
@@ -101,7 +163,7 @@ def _call_gemini(model: str, prompt: str, api_key: str) -> str:
     return r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
 
 
-def _call_openai_compatible(provider: str, model: str, prompt: str, api_key: str) -> str:
+def _call_openai_compatible(provider: str, model: str, system: str, prompt: str, api_key: str) -> str:
     base = "https://api.groq.com/openai/v1" if provider == "groq" else "https://api.openai.com/v1"
     r = _post_retry(
         f"{base}/chat/completions",
@@ -109,7 +171,7 @@ def _call_openai_compatible(provider: str, model: str, prompt: str, api_key: str
         json={
             "model": model,
             "messages": [
-                {"role": "system", "content": _SYSTEM},
+                {"role": "system", "content": system},
                 {"role": "user", "content": prompt},
             ],
             "temperature": 0.2,
@@ -120,7 +182,7 @@ def _call_openai_compatible(provider: str, model: str, prompt: str, api_key: str
     return r.json()["choices"][0]["message"]["content"].strip()
 
 
-def _call_claude(model: str, prompt: str, api_key: str) -> str:
+def _call_claude(model: str, system: str, prompt: str, api_key: str) -> str:
     import requests
 
     r = requests.post(
@@ -133,7 +195,7 @@ def _call_claude(model: str, prompt: str, api_key: str) -> str:
         json={
             "model": model,
             "max_tokens": 600,
-            "system": _SYSTEM,
+            "system": system,
             "messages": [{"role": "user", "content": prompt}],
         },
         timeout=60,

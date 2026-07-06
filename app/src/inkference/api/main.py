@@ -13,6 +13,7 @@ Endpoints (see projectNotes/inkference_platform_plan.md):
 """
 from __future__ import annotations
 
+import logging
 import os
 import re
 import unicodedata
@@ -33,6 +34,24 @@ from ..config import (
 from ..rag.answer import answer_question
 from . import services
 
+
+def _setup_logging() -> None:
+    """Route all `inkference.*` loggers to the console at INKFERENCE_LOG_LEVEL
+    (default INFO; set DEBUG for verbose). Independent of uvicorn's own loggers."""
+    level = os.getenv("INKFERENCE_LOG_LEVEL", "INFO").upper()
+    lg = logging.getLogger("inkference")
+    lg.setLevel(level)
+    if not lg.handlers:
+        h = logging.StreamHandler()
+        h.setFormatter(logging.Formatter(
+            "%(asctime)s [%(levelname)s] %(name)s: %(message)s", "%H:%M:%S"))
+        lg.addHandler(h)
+        lg.propagate = False
+
+
+_setup_logging()
+logger = logging.getLogger("inkference.api")
+
 app = FastAPI(title="Inkference", version="0.1.0")
 
 app.add_middleware(
@@ -41,6 +60,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def _no_cache_frontend(request, call_next):
+    """Tell browsers to revalidate the static frontend so edits (js/css/html)
+    always load fresh instead of serving a stale cached bundle."""
+    response = await call_next(request)
+    if not request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
 
 
 # --------------------------------------------------------------------------- #
@@ -55,6 +84,7 @@ class CreateDocument(BaseModel):
 class AskRequest(BaseModel):
     question: str
     top_k: int | None = None
+    persona: str | None = None  # "cook" -> answer in character as Captain Cook
 
 
 def _slugify(text: str) -> str:
@@ -165,8 +195,11 @@ def ask(doc_id: int, body: AskRequest) -> dict:
         raise HTTPException(404, "document not found")
     index = services.get_index()
     if not index.exists(doc_id):
+        logger.info("building RAG index for doc %s", doc_id)
         index.build_from_store(doc_id, store)
-    ans = answer_question(doc_id, body.question, index, top_k=body.top_k)
+    logger.info("ask doc=%s persona=%s q=%r", doc_id, body.persona, body.question[:100])
+    ans = answer_question(doc_id, body.question, index, top_k=body.top_k, persona=body.persona)
+    logger.info("ask doc=%s -> sources=%s", doc_id, ans.source_pages)
     return ans.to_dict()
 
 

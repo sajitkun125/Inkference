@@ -108,10 +108,15 @@ class RAGConfig:
         )
     )
     top_k: int = field(default_factory=lambda: _env_int("RAG_TOP_K", 5))
-    # Provider for the written answer: gemini | groq | claude | openai
+    # Primary provider for the written answer: gemini | groq | claude | openai
     llm_provider: str = field(default_factory=lambda: os.getenv("LLM_PROVIDER", "gemini"))
     llm_model: str = field(default_factory=lambda: os.getenv("LLM_MODEL", ""))
     llm_api_key: str = field(default_factory=lambda: os.getenv("LLM_API_KEY", ""))
+    # Ordered fallback chain tried when the primary errors/rate-limits, as a
+    # comma-separated "provider:model" list. After all fail -> extractive fallback.
+    llm_fallback: str = field(
+        default_factory=lambda: os.getenv("LLM_FALLBACK", "gemini:gemini-2.5-flash-lite")
+    )
 
     _PROVIDER_KEYS = {
         "gemini": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
@@ -124,10 +129,28 @@ class RAGConfig:
         # If no explicit LLM_API_KEY, pull the key for the SELECTED provider so a
         # provider switch (e.g. gemini -> groq) uses the right key automatically.
         if not self.llm_api_key:
-            for env in self._PROVIDER_KEYS.get((self.llm_provider or "").lower(), ()):
-                if os.getenv(env):
-                    self.llm_api_key = os.getenv(env)
-                    break
+            self.llm_api_key = self.key_for(self.llm_provider)
+
+    def key_for(self, provider: str) -> str:
+        """Resolve the API key for a provider (used per-attempt in the chain)."""
+        provider = (provider or "").lower()
+        if self.llm_api_key and provider == (self.llm_provider or "").lower():
+            return self.llm_api_key
+        for env in self._PROVIDER_KEYS.get(provider, ()):
+            if os.getenv(env):
+                return os.getenv(env)
+        return ""
+
+    def attempts(self) -> list[tuple[str, str]]:
+        """Ordered (provider, model) attempts: primary first, then the fallback chain."""
+        out: list[tuple[str, str]] = [((self.llm_provider or "").lower(), self.llm_model)]
+        for part in self.llm_fallback.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            provider, _, model = part.partition(":")
+            out.append((provider.strip().lower(), model.strip()))
+        return out
 
 
 @dataclass

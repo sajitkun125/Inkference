@@ -144,22 +144,25 @@ $("#view-toggle").addEventListener("click", (e) => {
 });
 
 /* ---------- Ask the Archive ---------- */
-async function ask(question) {
+async function ask(question, persona) {
   if (!question.trim() || !state.doc) return;
+  const cook = persona === "cook";
   const thread = $("#thread");
   const q = el("div", "bubble-q"); q.textContent = question; thread.appendChild(q);
 
   const ans = el("div", "answer");
+  const tag = cook ? '<span class="in-character">in character</span>' : "";
+  const loading = cook ? "Consulting the journal…" : "…thinking…";
   ans.innerHTML = `<div class="answer-head"><div class="answer-mark">I</div>
-    <span class="answer-who">Inkference</span></div>
-    <div class="answer-body">…thinking…</div>`;
+    <span class="answer-who">${cook ? "Author" : "Inkference"}</span>${tag}</div>
+    <div class="answer-body">${loading}</div>`;
   thread.appendChild(ans);
   thread.scrollTop = thread.scrollHeight;
 
   try {
     const res = await api(`/documents/${state.doc.id}/ask`, {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question, persona: persona || null }),
     });
     ans.querySelector(".answer-body").textContent = res.answer;
     if (res.source_pages && res.source_pages.length) {
@@ -177,8 +180,10 @@ async function ask(question) {
   }
   thread.scrollTop = thread.scrollHeight;
 }
-$("#ask-send").addEventListener("click", () => { const i = $("#ask-input"); ask(i.value); i.value = ""; });
-$("#ask-input").addEventListener("keydown", (e) => { if (e.key === "Enter") { ask(e.target.value); e.target.value = ""; } });
+function submitAsk(persona) { const i = $("#ask-input"); ask(i.value, persona); i.value = ""; }
+$("#ask-send").addEventListener("click", () => submitAsk());
+$("#ask-cook").addEventListener("click", () => submitAsk("cook"));
+$("#ask-input").addEventListener("keydown", (e) => { if (e.key === "Enter") submitAsk(); });
 $("#suggestions").addEventListener("click", (e) => { if (e.target.dataset.q) ask(e.target.dataset.q); });
 
 /* ---------- Upload & Process ---------- */
