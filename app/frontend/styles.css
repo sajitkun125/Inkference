@@ -180,12 +180,24 @@ body {
   border: 1px solid #ddd0b8; border-radius: 14px; padding: 8px 8px 8px 18px;
   box-shadow: 0 6px 20px rgba(60,42,18,.07);
 }
-.dock input { flex: 1; border: none; outline: none; font-size: 16px; font-family: var(--sans); background: none; color: var(--text); }
+.dock input { flex: 1; min-width: 0; border: none; outline: none; font-size: 16px; font-family: var(--sans); background: none; color: var(--text); }
+.cook-btn {
+  display: flex; align-items: center; gap: 7px; cursor: pointer; white-space: nowrap;
+  font-family: var(--sans); font-size: 13px; font-weight: 500; color: var(--accent);
+  background: #f6ece0; border: 1px solid rgba(138,58,47,.28); border-radius: 10px; padding: 9px 13px;
+}
+.cook-btn:hover { background: #f0e0d0; }
 .send-btn {
   width: 40px; height: 40px; border: none; border-radius: 11px; background: var(--accent);
-  color: #fff; font-size: 18px; cursor: pointer;
+  color: #fff; font-size: 18px; cursor: pointer; flex: 0 0 auto;
 }
 .disclaimer { text-align: center; font-size: 11.5px; color: #a99a82; margin-top: 10px; }
+/* IN CHARACTER pill on Captain Cook answers */
+.in-character {
+  font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--accent);
+  background: rgba(138,58,47,.09); border: 1px solid rgba(138,58,47,.22);
+  border-radius: 999px; padding: 2px 9px;
+}
 
 /* ===== Upload & Process ===== */
 .dropzone {
