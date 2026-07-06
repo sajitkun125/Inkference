@@ -35,3 +35,9 @@ the full environment-variable reference. The build plan and progress log live in
 ## For empty data or seed 
 INKFERENCE_DATA_ROOT=$(pwd)/app/.inkference_data_fresh \
   uvicorn inkference.api.main:app --port 8000 --log-level debug 2>&1 | tee app/server.log
+
+
+
+## For deployment
+
+ app/deploy/deploy_to_hf.sh sajitkun125/inkference

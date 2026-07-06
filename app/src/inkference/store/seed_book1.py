@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import argparse
 import re
-import shutil
 from pathlib import Path
 
 from ..htr.align import align_page
@@ -64,11 +63,24 @@ def parse_corrected(path: Path) -> list[str]:
     return out
 
 
-def _image_for(stem: str, alex: Path) -> Path | None:
+def _image_bytes(stem: str, alex: Path) -> bytes | None:
+    """Return the page image bytes. Prefers a real .jpg (local dev), but falls back
+    to a base64 sidecar (.jpg.b64) — used for the HF Space build, where binary files
+    get stored as Git-LFS pointers and aren't materialized, whereas base64 text is."""
     # data stem B1_P012 -> image B1_P_012.jpg
     num = stem[len("B1_P"):]
-    cand = alex / "book1" / "forster1" / f"B1_P_{num}.jpg"
-    return cand if cand.exists() else None
+    base = alex / "book1" / "forster1"
+    jpg = base / f"B1_P_{num}.jpg"
+    if jpg.exists():
+        data = jpg.read_bytes()
+        # Ignore Git-LFS pointer files (text stub, not the image) — fall through to .b64.
+        if not data.startswith(b"version https://git-lfs"):
+            return data
+    b64 = base / f"B1_P_{num}.jpg.b64"
+    if b64.exists():
+        import base64
+        return base64.b64decode(b64.read_text())
+    return None
 
 
 def build_page(stem: str, alex: Path, assets: Path, page_number: int):
@@ -82,14 +94,15 @@ def build_page(stem: str, alex: Path, assets: Path, page_number: int):
     corrected_lines = parse_corrected(corr_path)
     flat_conf = [wc for line in conf_lines for wc in line]
 
-    img_src = _image_for(stem, alex)
-    if img_src is None:
+    img_data = _image_bytes(stem, alex)
+    if img_data is None:
         return None
-    with Image.open(img_src) as im:
+    from io import BytesIO
+    with Image.open(BytesIO(img_data)) as im:
         W, H = im.size
     assets.mkdir(parents=True, exist_ok=True)
     dest = assets / f"{stem}.jpg"
-    shutil.copy2(img_src, dest)
+    dest.write_bytes(img_data)  # store the decoded image for the Reader to serve
 
     # raw lines (Raw view) with synthetic vertical bands
     rowh = H / max(1, len(conf_lines))
