@@ -21,12 +21,14 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from ..config import (
     FRONTEND_DIR,
+    IMAGES_BASE_URL,
+    IMAGES_ROOT,
     correction as correction_cfg,
     htr as htr_cfg,
     rag as rag_cfg,
@@ -180,9 +182,18 @@ def get_page(doc_id: int, page_number: int) -> dict:
 @app.get("/api/documents/{doc_id}/pages/{page_number}/image")
 def get_page_image(doc_id: int, page_number: int):
     path = services.get_store().get_page_image_path(doc_id, page_number)
-    if not path or not Path(path).exists():
+    if not path:
         raise HTTPException(404, "page image not found")
-    return FileResponse(path)
+    p = Path(path)
+    # Remote images (deployment): redirect relative keys to a CDN/dataset base URL
+    # so large image sets don't need to be baked into the app.
+    if IMAGES_BASE_URL and not p.is_absolute():
+        return RedirectResponse(f"{IMAGES_BASE_URL.rstrip('/')}/{path}")
+    # Local: absolute path (self-contained seeds) or relative key under IMAGES_ROOT.
+    for candidate in (p, (IMAGES_ROOT / path) if IMAGES_ROOT else None):
+        if candidate and candidate.exists():
+            return FileResponse(candidate)
+    raise HTTPException(404, "page image not found")
 
 
 # --------------------------------------------------------------------------- #

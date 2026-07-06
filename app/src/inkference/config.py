@@ -47,6 +47,16 @@ FRONTEND_DIR = Path(os.getenv("INKFERENCE_FRONTEND_DIR", APP_ROOT / "frontend"))
 TRANSCRIPTIONS_ROOT = Path(
     os.getenv("INKFERENCE_TRANSCRIPTIONS_ROOT", PROJECT_ROOT / "transcriptions")
 )
+# Base dir for resolving RELATIVE page-image keys stored in the DB (e.g.
+# "book1/forster1/B1_P_012.jpg"). Lets one seeded DB stay portable: point this at
+# the local source (~/Downloads/AlexFiles) in dev, or the downloaded images dataset
+# (/app/book_images) on the Space. Absolute image paths in the DB are used as-is.
+_images_root = os.getenv("INKFERENCE_IMAGES_ROOT")
+IMAGES_ROOT = Path(_images_root) if _images_root else None
+# Alternative to IMAGES_ROOT for deployment: if set, relative image keys are served
+# by REDIRECTING to "{IMAGES_BASE_URL}/{key}" (e.g. a public HF dataset resolve URL),
+# so large image sets don't need to be baked into the Space image.
+IMAGES_BASE_URL = os.getenv("INKFERENCE_IMAGES_BASE_URL") or None
 
 
 @dataclass
@@ -108,6 +118,11 @@ class RAGConfig:
         )
     )
     top_k: int = field(default_factory=lambda: _env_int("RAG_TOP_K", 5))
+    # Index the post-corrected text (True) or the raw TrOCR text (False). Corrected
+    # is cleaner -> better retrieval/answers; pages with no correction fall back to raw.
+    use_corrected_text: bool = field(
+        default_factory=lambda: _env_bool("RAG_USE_CORRECTED", True)
+    )
     # Primary provider for the written answer: gemini | groq | claude | openai
     llm_provider: str = field(default_factory=lambda: os.getenv("LLM_PROVIDER", "gemini"))
     llm_model: str = field(default_factory=lambda: os.getenv("LLM_MODEL", ""))

@@ -87,6 +87,7 @@ Without the keys the app still runs — correction and answers degrade to their 
 | `CORRECTION_API_MODEL` | `qwen/qwen3-32b` | Groq correction model |
 | `LLM_PROVIDER` / `LLM_MODEL` | `groq` / `openai/gpt-oss-120b` | primary Ask-the-Archive model |
 | `LLM_FALLBACK` | `gemini:gemini-2.5-flash-lite` | ordered `provider:model` fallback chain |
+| `RAG_USE_CORRECTED` | `true` | index post-corrected text (`false` = raw TrOCR) |
 | `GROQ_API_KEY` | – (secret) | correction + primary RAG |
 | `GEMINI_API_KEY` / `GOOGLE_API_KEY` | – (secret) | RAG fallback |
 | `INKFERENCE_LOG_LEVEL` | `INFO` | `DEBUG` for per-page/stage + provider logs |
