@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "captain-rag"
+version = "0.1.0"
+description = "Q&A chat / RAG over the transcribed Captain Cook journal pages"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "sentence-transformers",
+    "faiss-cpu",
+    "requests",
+    "python-dotenv",
+]
+
+[project.scripts]
+captain-rag = "captain_rag.chat:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
