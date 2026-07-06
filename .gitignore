@@ -104,6 +104,9 @@ celerybeat.pid
 # Environments
 .env
 .venv
+
+# captain-rag build artifacts
+app/.rag_index/
 env/
 venv/
 ENV/
