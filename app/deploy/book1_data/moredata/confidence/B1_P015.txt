@@ -1,0 +1,30 @@
+=== Buch 1, Seite 015 ===
+SCHWELLE: 0.7
+UNSICHERE_WÖRTER: 20 von 166
+
+[L01] <<s>>(0.33)
+[L02] 
+[L03] my(1.00) name,(1.00) qualification(0.99) &(0.99) place(0.96) of(1.00) <<a>>(0.59) <<side>>(0.42) &(0.97)
+[L04] added(0.86) he(0.90) thought(1.00) this(1.00) were(1.00) a(1.00) great(1.00) step(0.99) &(1.00)
+[L05] that(1.00) I(1.00) should(1.00) continue(1.00) to(1.00) keep(1.00) the(1.00) affair(0.98)
+[L06] very(1.00) secret.(0.99)
+[L07] May(1.00) <<4.>>(0.64) <<24.>>(0.60) <<I>>(0.63) saw(1.00) Mr.(0.83) Baines(0.83) <<Barrington>>(0.53) &(1.00) told(0.99) him(1.00)
+[L08] that(0.97) Mr(0.97) Banks(0.94) or(0.92) not(1.00) go,(1.00) &(0.84) as(0.99) he(1.00) was(1.00) as-(1.00)
+[L09] <<kine>>(0.47) whether(1.00) it(0.93) was(1.00) <<two>>(0.20) <<of>>(0.63) it;(0.80) I(0.89) told,(0.98) I(0.97)
+[L10] had(1.00) heart(0.72) that(0.90) he(1.00) had(1.00) already(0.99) <<scared>>(0.14)
+[L11] his(1.00) Equipage(0.95) &(1.00) cloth,(0.92) books(0.99) &(0.88) Instru-(0.71)
+[L12] ments(1.00) to(1.00) be(1.00) taken(0.98) out(1.00) of(1.00) the(1.00) Resolution(0.96)
+[L13] &(0.99) that(1.00) she(1.00) was(1.00) repairing(0.95) at(1.00) Sheerness,(0.92)
+[L14] having(1.00) heard(0.95) this(1.00) from(1.00) an(1.00) acquaintance,(0.98)
+[L15] who(1.00) was(0.99) well(1.00) <<acquainted>>(0.46) with(1.00) Mr.(0.98) She-(0.90)
+[L16] phens.(0.77) <<Mr>>(0.41) Barrington.(0.73) hereupon(1.00) <<as>>(0.61) <<become:>>(0.59)
+[L17] In(0.83) case(0.96) provision(1.00) was(1.00) made(1.00) for(1.00) me(0.95)
+[L18] &(0.98)
+[L19] family,(1.00) whether(1.00) I(1.00) would(0.99) <<go,>>(0.44) I(1.00) told,(0.98)
+[L20] I(0.74) would,(1.00) provided(0.96) my(1.00) Son(0.91) Geomo(0.70) was(1.00)
+[L21] likewise(1.00) appointed.(0.90) He(1.00) approved(0.98) of(1.00) his(0.86)
+[L22] condition(1.00) &(1.00) desired(1.00) <<me>>(0.53) to(1.00) carry(0.99) a(1.00) letter(0.99)
+[L23] to(0.99) <<III.>>(0.69) Butler(0.80) on(0.96) the(1.00) <<Subject>>(0.33) to(0.99) the(1.00)
+[L24] 
+[L25] admiralty.(0.94) I(1.00) brought(1.00) it(0.95) to(1.00) his(1.00) house(1.00)
+[L26] but(1.00) found(1.00) him(1.00) not(1.00) at(1.00) <<home.>>(0.58)

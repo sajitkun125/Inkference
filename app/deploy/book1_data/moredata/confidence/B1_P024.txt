@@ -1,0 +1,27 @@
+=== Buch 1, Seite 024 ===
+SCHWELLE: 0.7
+UNSICHERE_WÖRTER: 12 von 160
+
+[L01] s(0.79)
+[L02] From(1.00) this(1.00) day(0.80) I(1.00) could(1.00) first(1.00) consider(1.00) my-(1.00)
+[L03] self(0.90) as(0.98) <<being>>(0.48) appointed(0.98) by(1.00) <<his>>(0.49) Majesty(1.00)
+[L04] on(1.00) the(1.00) Expedition.(0.99) The(1.00) Order(0.99) signed(1.00) by(1.00) the(0.99)
+[L05] <<King>>(0.47) imported(0.93) that(1.00) 1795.(0.89) I(1.00) should(1.00) be(1.00) paid(1.00)
+[L06] to(1.00) me(1.00) by(1.00) the(1.00) Exchequer,(1.00) which(1.00) I(0.98) <<receive>>(0.53)
+[L07] <<accordingly>>(0.67) some(1.00) says(1.00) afterwards.(1.00)
+[L08] the(0.72) same(1.00) day(0.99) I(1.00) went(1.00) to(1.00) <<Mr.>>(0.67) Banks(0.85) &(0.98) not(1.00)
+[L09] finding(0.73) him(1.00) at(1.00) home(1.00) I(1.00) wrote(1.00) a(1.00) note(0.98) to(1.00)
+[L10] him(0.98) desiring(0.77) him(1.00) to(1.00) appoint(0.99) me(1.00) a(1.00)
+[L11] day,(1.00) when(0.98) I(1.00) could(1.00) have(1.00) the(1.00) favour(0.96) to(1.00)
+[L12] speak(0.92) to(1.00) him;(0.96) <<for>>(0.70) being(1.00) appointed(0.75) by(0.99)
+[L13] his(1.00) Majesty(0.99) to(0.96) go(1.00) on(1.00) the(1.00) Expedition,(0.99)
+[L14] I(0.94) wished(1.00) to(1.00) be(1.00) informed(0.99) by(1.00) him(1.00) <<to>>(0.16) me(0.91)
+[L15] particulars(0.97) relative(1.00) to(1.00) my(1.00) <<equipment>>(0.60)
+[L16] &(0.99) having(1.00) always(1.00) been(1.00) favoured(0.97) with(1.00)
+[L17] his(1.00) friendship(1.00) I(0.93) hoped,(0.99) he(1.00) would(1.00) add(0.97)
+[L18] this(0.98) to(0.98) the(1.00) many(1.00) obligations(0.83) he(0.99)
+[L19] had(1.00) already,(0.98) laid(1.00) me(0.98) under(1.00)
+[L20] <<as>>(0.53) it(0.95) was(1.00) just(1.00) going(0.90) away(1.00) Dr(0.92) <<Scharter>>(0.44)
+[L21] came(1.00) in,(0.99) I(0.94) told(0.99) of(1.00) my(1.00) going(1.00) &(0.99) <<began>>(0.29)
+[L22] likewise(0.99) his(1.00) advice,(0.96) He(1.00) congratulated(0.77)
+[L23] are(0.86) coolly(0.97) &(1.00) was(1.00) civil;(0.98) but(1.00) the(1.00) moment(1.00)
