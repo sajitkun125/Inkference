@@ -45,7 +45,8 @@ ENV INKFERENCE_DATA_ROOT=/data \
     # --- Ask-the-Archive: Groq gpt-oss-120b -> Gemini fallback -> extractive ---
     LLM_PROVIDER=groq \
     LLM_MODEL=openai/gpt-oss-120b \
-    LLM_FALLBACK=gemini:gemini-2.5-flash-lite
+    LLM_FALLBACK=gemini:gemini-2.5-flash-lite \
+    RAG_USE_CORRECTED=true
 # Set as Space secrets (Settings -> Variables and secrets):
 #   GROQ_API_KEY   -> post-correction AND primary RAG answers
 #   GEMINI_API_KEY -> RAG fallback when Groq is rate-limited/unavailable

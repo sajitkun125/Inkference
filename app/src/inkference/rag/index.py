@@ -115,7 +115,11 @@ class RagIndex:
         return len(chunks)
 
     def build_from_store(self, doc_id: int, store: "DocumentStore") -> int:
-        return self.build(doc_id, store.iter_pages_text(doc_id))
+        # RAG_USE_CORRECTED (default True) -> index post-corrected text, else raw TrOCR.
+        return self.build(
+            doc_id,
+            store.iter_pages_text(doc_id, prefer_corrected=self.cfg.use_corrected_text),
+        )
 
     def _persist(self, doc_id: int) -> None:
         import faiss

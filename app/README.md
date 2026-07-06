@@ -38,6 +38,40 @@ INKFERENCE_DATA_ROOT=$(pwd)/app/.inkference_data_fresh \
 
 
 
-## For deployment
+## Deploy to Hugging Face Space (full corpus, all 6 books)
 
- app/deploy/deploy_to_hf.sh sajitkun125/inkference
+Reuses the existing Space `sajitkun125/inkference`. Everything large lives in a **public
+HF dataset** (HF's Docker build ships Git-LFS as pointers, so large/binary files can't go
+in the Space repo). The image pulls them at build with `snapshot_download` (which resolves
+LFS):
+- **scans (1.3 GB)** → streamed from the dataset CDN (not baked)
+- **prebuilt DB + FAISS index (~40 MB)** → downloaded at build → instant boot, no re-seed
+
+**1. Upload the scans once (public dataset):**
+```bash
+hf auth whoami                                          # ensure logged in (else: hf auth login)
+hf repo create inkference-book-images --repo-type dataset
+hf upload sajitkun125/inkference-book-images ~/Downloads/AlexFiles . \
+  --repo-type dataset --include "book*/forster*/*.jpg"
+```
+
+**2. Deploy** — uploads the prebuilt DB+index to the dataset (`seed_data/`) and the app
+code to the Space (removes stale Book-1 files):
+```bash
+bash app/deploy/deploy_all_books.sh sajitkun125/inkference
+```
+
+**3. On the Space → Settings → Variables and secrets:**
+- Variable `INKFERENCE_IMAGES_BASE_URL` =
+  `https://huggingface.co/datasets/sajitkun125/inkference-book-images/resolve/main`
+- Secrets `GROQ_API_KEY`, `GEMINI_API_KEY` (persist across redeploys)
+
+The Dockerfile's `SEED_DATASET` must match your dataset (default
+`sajitkun125/inkference-book-images`). Redeploy after code/corpus changes: re-run the seed
+if the corpus changed, then re-run step 2 (Factory-reboot the Space if a cached build layer
+serves an old corpus). Full details: [../projectNotes/deploy_all_books.md](../projectNotes/deploy_all_books.md).
+
+### Alternative: Book-1-only demo (self-contained, base64 images)
+```bash
+bash app/deploy/deploy_to_hf.sh sajitkun125/inkference
+```
