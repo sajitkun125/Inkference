@@ -6,6 +6,7 @@ free-CPU pages process serially; the frontend polls GET /jobs/{id} for progress.
 """
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import traceback
@@ -82,20 +83,29 @@ def _run_ingest(doc_id: int, page_specs: list[tuple[int, int, str]], job_id: int
                     message=f"Page {page_number} — {msg}",
                 )
 
+            def on_segmented(bboxes, w, h, _pn=page_number) -> None:
+                # Surface line boxes the instant segmentation finishes (before the slow
+                # recognition/correction) so the UI can overlay them right away.
+                store.update_job(job_id, seg_preview=json.dumps(
+                    {"page_number": _pn, "width": w, "height": h, "boxes": bboxes}))
+
             logger.info("job %s: processing page %s (%d/%d)", job_id, page_number, done + 1, total)
             store.set_page_status(page_id, "processing")
-            result = pipeline.process_path(image_path, page_number, progress)
+            result = pipeline.process_path(image_path, page_number, progress, on_segmented)
             store.save_page_result(page_id, result)
             store.update_job(job_id, done_pages=done + 1)
             logger.info("job %s: page %s done — %d lines, avg conf %.2f",
                         job_id, page_number, len(result.lines), result.avg_confidence)
 
-        # Rebuild the retrieval index now that new pages exist.
-        n_chunks = get_index().build_from_store(doc_id, store)
+        # Incrementally index only the newly-added pages (a full rebuild re-embeds the
+        # whole corpus, ~90s for 900 pages, and needlessly delays "Complete").
+        page_numbers = [pn for (_pid, pn, _path) in page_specs]
+        n_chunks = get_index().add_pages(doc_id, store, page_numbers)
         store.update_job(
             job_id, status=JobStatus.COMPLETE, progress=1.0, message="Complete"
         )
-        logger.info("ingest job %s complete; RAG index rebuilt (%s chunks)", job_id, n_chunks)
+        logger.info("ingest job %s complete; RAG index updated (+%d page(s), %s chunks)",
+                    job_id, len(page_numbers), n_chunks)
     except Exception as exc:  # surface failure to the job poller
         logger.exception("ingest job %s FAILED: %s", job_id, exc)
         store.update_job(

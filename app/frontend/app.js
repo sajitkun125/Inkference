@@ -135,8 +135,11 @@ function renderTranscription() {
     }
   }
 }
-$("#prev-page").addEventListener("click", () => loadPage(state.page - 1));
-$("#next-page").addEventListener("click", () => loadPage(state.page + 1));
+// Cyclic navigation: next past the last page wraps to page 1, prev before page 1 wraps to the last.
+$("#prev-page").addEventListener("click", () =>
+  loadPage(state.page > 1 ? state.page - 1 : state.totalPages));
+$("#next-page").addEventListener("click", () =>
+  loadPage(state.page < state.totalPages ? state.page + 1 : 1));
 $("#view-toggle").addEventListener("click", (e) => {
   if (!e.target.dataset.view) return;
   state.readerView = e.target.dataset.view;
@@ -216,7 +219,10 @@ async function handleFiles(fileList) {
     state.doc = { id: d.id, slug: d.slug, title: "My Manuscript", subtitle: "", page_count: 0 };
   }
 
-  // preview first file
+  // preview first file; reset any boxes/state from a previous upload
+  state._segPreviewShown = false;
+  state._segRedraw = null;
+  $("#seg-overlay").innerHTML = "";
   const reader = new FileReader();
   reader.onload = () => { $("#ingest-img").src = reader.result; };
   reader.readAsDataURL(files[0]);
@@ -236,11 +242,14 @@ async function handleFiles(fileList) {
   const fd = new FormData();
   files.forEach((f) => fd.append("files", f));
   $("#ingest-status").textContent = "Uploading…";
-  const { job_id } = await api(`/documents/${state.doc.id}/pages`, { method: "POST", body: fd });
-  pollJob(job_id, rows, files.length);
+  const resp = await api(`/documents/${state.doc.id}/pages`, { method: "POST", body: fd });
+  // Use the authoritative page numbers the server assigned (don't recompute from a
+  // client-side counter, which drifts across reloads/restarts and can point at a
+  // previously-seeded page instead of the one just uploaded).
+  pollJob(resp.job_id, rows, files.length, resp.pages || []);
 }
 
-async function pollJob(jobId, rows, total) {
+async function pollJob(jobId, rows, total, uploadedPages = []) {
   const timer = setInterval(async () => {
     let job;
     try { job = await api(`/jobs/${jobId}`); } catch (e) { return; }
@@ -248,6 +257,19 @@ async function pollJob(jobId, rows, total) {
     const stage = job.stage || "segmentation";
     setStep(stage);
     $("#ingest-status").textContent = job.message || job.status;
+
+    // Draw the segmentation boxes as soon as they're published (mid-pipeline),
+    // once, for the first uploaded page (the one shown in the local preview).
+    if (job.seg_preview && !state._segPreviewShown) {
+      try {
+        const sp = JSON.parse(job.seg_preview);
+        const firstPage = uploadedPages[0];
+        if (firstPage == null || sp.page_number === firstPage) {
+          state._segPreviewShown = true;
+          drawSegPreview(sp);
+        }
+      } catch (e) { /* ignore malformed preview */ }
+    }
 
     rows.forEach((row, i) => {
       const bar = row.querySelector(".q-bar > div");
@@ -269,7 +291,8 @@ async function pollJob(jobId, rows, total) {
       if (job.status === "complete") {
         state.doc.page_count = (state.doc.page_count || 0) + total;
         state.totalPages = state.doc.page_count;
-        await drawSegmentation(state.totalPages - total + 1);
+        const firstPage = uploadedPages[0] ?? (state.totalPages - total + 1);
+        await drawSegmentation(firstPage);
       } else {
         $("#ingest-status").textContent = "Failed: " + (job.message || "error");
       }
@@ -277,32 +300,59 @@ async function pollJob(jobId, rows, total) {
   }, 1000);
 }
 
-/* overlay detected line boxes on the processed page preview */
+/* Draw line boxes over the #ingest-img preview. `boxes` = [{bbox:[x0,y0,x1,y1], review}].
+   pageW/pageH are the (possibly downscaled) page dims the boxes are expressed in. */
+function overlayBoxes(boxes, pageW, pageH) {
+  const img = $("#ingest-img");
+  const overlay = $("#seg-overlay");
+  overlay.innerHTML = "";
+  const r = img.getBoundingClientRect();
+  const pr = overlay.getBoundingClientRect();
+  const offX = r.left - pr.left, offY = r.top - pr.top;
+  const sx = r.width / pageW, sy = r.height / pageH;
+  boxes.forEach(({ bbox, review }) => {
+    const [x0, y0, x1, y1] = bbox;
+    const b = el("div", "seg-box" + (review ? " review" : ""));
+    b.style.left = offX + x0 * sx + "px";
+    b.style.top = offY + y0 * sy + "px";
+    b.style.width = (x1 - x0) * sx + "px";
+    b.style.height = (y1 - y0) * sy + "px";
+    overlay.appendChild(b);
+  });
+}
+
+/* Early preview: draw the raw segmentation boxes (no confidence yet) as soon as the
+   segmentation stage publishes them, over the local file preview already on screen. */
+function drawSegPreview(sp) {
+  const img = $("#ingest-img");
+  const boxes = (sp.boxes || []).map((bbox) => ({ bbox, review: false }));
+  const draw = () => overlayBoxes(boxes, sp.width, sp.height);
+  state._segRedraw = draw;
+  if (img.complete && img.naturalWidth) draw();
+  else img.onload = draw;
+  $("#ingest-status").textContent = `Segmented · ${boxes.length} lines — recognizing…`;
+}
+
+/* Final overlay: fetch the finished page and draw boxes tinted by confidence. */
 async function drawSegmentation(pageNumber) {
   try {
     const page = await api(`/documents/${state.doc.id}/pages/${pageNumber}`);
     const img = $("#ingest-img");
-    img.src = `${API}/documents/${state.doc.id}/pages/${pageNumber}/image`;
-    img.onload = () => {
-      const overlay = $("#seg-overlay");
-      overlay.innerHTML = "";
-      const r = img.getBoundingClientRect();
-      const pr = overlay.getBoundingClientRect();
-      const offX = r.left - pr.left, offY = r.top - pr.top;
-      const sx = r.width / page.width, sy = r.height / page.height;
-      page.lines.forEach((ln) => {
-        const [x0, y0, x1, y1] = ln.bbox;
-        const b = el("div", "seg-box" + (ln.needs_review ? " review" : ""));
-        b.style.left = offX + x0 * sx + "px";
-        b.style.top = offY + y0 * sy + "px";
-        b.style.width = (x1 - x0) * sx + "px";
-        b.style.height = (y1 - y0) * sy + "px";
-        overlay.appendChild(b);
-      });
+    const boxes = (page.lines || []).map((ln) => ({ bbox: ln.bbox, review: ln.needs_review }));
+    const draw = () => {
+      overlayBoxes(boxes, page.width, page.height);
       $("#ingest-status").textContent = `Done · ${page.lines.length} lines`;
     };
-  } catch (e) { /* ignore */ }
+    // Attach handler BEFORE src (the scan is under /api/, which is browser-cached),
+    // and draw immediately if it's already loaded — otherwise a cached image never
+    // fires `load` and the overlay stays empty. Redraw on resize so boxes track the img.
+    state._segRedraw = draw;
+    img.onload = draw;
+    img.src = `${API}/documents/${state.doc.id}/pages/${pageNumber}/image`;
+    if (img.complete && img.naturalWidth) draw();
+  } catch (e) { console.error("drawSegmentation failed", e); }
 }
 $("#open-reader").addEventListener("click", () => { showView("reader"); loadPage(state.totalPages); });
+window.addEventListener("resize", () => { if (state._segRedraw) state._segRedraw(); });
 
 init();
