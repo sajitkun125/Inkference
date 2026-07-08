@@ -52,12 +52,6 @@ body {
   color: #9a8a70; height: 100%; border-bottom: 2px solid transparent;
 }
 .tab.active { color: #f4ead8; border-bottom-color: var(--accent-2); }
-.avatar {
-  width: 30px; height: 30px; border-radius: 50%; background: #3a2e20;
-  border: 1px solid rgba(255,255,255,.1);
-  display: flex; align-items: center; justify-content: center;
-  font-family: var(--serif); font-size: 13px; color: #d9c8a8;
-}
 
 /* ===== Views (split layout shared by Reader + Upload) ===== */
 .view { flex: 1; display: flex; min-height: 0; }

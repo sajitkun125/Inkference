@@ -22,6 +22,18 @@ STAGE="${STAGE:-$HOME/hf-inkference-allbooks}"
 
 [ -f "$DATA/inkference.db" ] || { echo "no DB at $DATA — seed it first"; exit 1; }
 
+# Guard: refuse to deploy a seed polluted by live uploads. Uploaded pages store an
+# ABSOLUTE local path (e.g. /home/.../assets/... or /data/assets/...) which does NOT
+# exist on the Space, so they'd render broken/wrong scans. Seeded pages use relative
+# keys. Abort if any absolute-path page is present so a test upload can't ship.
+STRAY="$("$REPO/.venv/bin/python" -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); print(c.execute(\"SELECT count(*) FROM pages WHERE image_path LIKE '/%'\").fetchone()[0]); c.close()" "$DATA/inkference.db")"
+if [ "$STRAY" != "0" ]; then
+  echo "ABORT: $DATA/inkference.db has $STRAY uploaded (absolute-path) page(s)."
+  echo "These are non-portable and would break on the Space. Rebuild the seed cleanly"
+  echo "(see app/README.md → 'Rebuild the seed corpus') with the server stopped, then retry."
+  exit 1
+fi
+
 # 1. Upload the prebuilt corpus (DB + index) to the dataset under seed_data/.
 "$REPO/.venv/bin/python" -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('PRAGMA wal_checkpoint(TRUNCATE)'); c.close()" "$DATA/inkference.db"
 SEED="$(mktemp -d)"

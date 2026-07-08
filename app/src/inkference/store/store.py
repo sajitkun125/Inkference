@@ -118,6 +118,10 @@ class DocumentStore:
             conn.execute("ALTER TABLE lines ADD COLUMN corrected_text TEXT")
         if "corrected_words" not in line_cols:
             conn.execute("ALTER TABLE lines ADD COLUMN corrected_words TEXT")
+        # Early segmentation preview: line boxes surfaced via the job status as soon as
+        # the segmentation stage finishes, before recognition/confidence/correction.
+        if "seg_preview" not in cols("jobs"):
+            conn.execute("ALTER TABLE jobs ADD COLUMN seg_preview TEXT")
 
     # -- documents ---------------------------------------------------------- #
     def create_document(self, title: str, slug: str, subtitle: str | None = None) -> int:
