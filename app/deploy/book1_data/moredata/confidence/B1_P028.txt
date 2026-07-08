@@ -1,0 +1,29 @@
+=== Buch 1, Seite 028 ===
+SCHWELLE: 0.7
+UNSICHERE_WÖRTER: 28 von 208
+
+[L01] me.(1.00) I(1.00) told(1.00) that(1.00) as(1.00) I(1.00) was(1.00) unacquainted,(0.74) <<with>>(0.23) the(1.00)
+[L02] peculiar(0.97) &(1.00) <<unposition>>(0.32) particulars(0.98) I(0.91) only(1.00) wished(1.00)
+[L03] to(1.00) be(1.00) by(1.00) him(1.00) <<instructed>>(0.43) in(0.99) regard(0.99) to(0.99) them,(0.99) but(1.00)
+[L04] Mr.(0.75) <<Tounks>>(0.39) declined,(0.93) this(1.00) &(0.89) <<repeated>>(0.41) I(0.99) should(0.95) ask(1.00)
+[L05] 
+[L06] him(1.00) questions(0.79) &(1.00) he(1.00) <<would>>(0.66) answer.(0.94) a(0.87) great(1.00) many(1.00)
+[L07] more(1.00) company(0.92) coming(1.00) in(1.00) I(0.74) on(1.00) purpose(1.00) asked(0.78)
+[L08] only(0.98) a(1.00) few(1.00) trifling(0.74) questions(0.71) &(0.83) then(1.00) applied(1.00)
+[L09] to(1.00) him(1.00) for(1.00) to(1.00) let(0.99) me(0.99) see(1.00) the(1.00) drawings(0.99) of(1.00) <<his>>(0.60)
+[L10] plants.(0.99) He(1.00) replied(1.00) this(1.00) would(1.00) be(1.00) of(1.00) little(1.00) use(0.99)
+[L11] to(1.00) me,(1.00) &(0.99) excused(0.77) himself(1.00) with(1.00) want(0.93) at(1.00) time(0.97)
+[L12] &(0.95) then(0.99) said,(0.98) since(1.00) I(0.99) saw,(1.00) he(1.00) declined(1.00) to(1.00) do(1.00) it(1.00)
+[L13] I(1.00) would(1.00) not(1.00) insist(0.87) upon(0.99) it(1.00) hereupon(1.00) Mr(0.77) <<13am>>(0.61)
+[L14] asked(0.90) me(1.00) when(1.00) she(0.89) Ship(1.00) would(0.98) <<sell.>>(0.45) I(1.00) told(1.00)
+[L15] I(0.99) did(1.00) not(1.00) know,(1.00) but(1.00) <<suspected>>(0.63) it(1.00) would(0.99)
+[L16] <<or>>(0.59) Sunday(0.93) sex(0.74) <<night>>(0.28)
+[L17] happen(0.99) on(1.00) Saturday(0.98) next,(0.99) then(1.00) he(1.00) desired(0.78)
+[L18] me(1.00) to(1.00) come(0.99) Saturday(0.99) next.(1.00) I(1.00) met(0.96) Capt.(0.78)
+[L19] that(0.99) day(1.00) at(1.00) <<Mr>>(0.47) <<Banks's>>(0.34) &(0.99) went(1.00) with(1.00) nine(0.80) to(1.00) the(0.95)
+[L20] Admiralty(0.99) <<where>>(0.70) a(1.00) board(1.00) of(1.00) longitude(1.00) was(1.00)
+[L21] to(1.00) be(1.00) held,(1.00) in(1.00) order(1.00) to(1.00) see(1.00) there(1.00) <<.>>(0.21) <<Mr.>>(0.65) Hormby.(0.72)
+[L22] then(1.00) went(1.00) with(1.00) <<Cape>>(0.37) Cook(0.84) home,(0.98) o(0.74) <<wave>>(0.65) him(1.00)
+[L23] to(0.88) dinner.(1.00)
+[L24] <<went>>(0.50) to(1.00) the(1.00) Treasury(1.00) &(1.00) Exchequer(0.92) &(1.00) <<got>>(0.60) <<179>>(0.67) <<5.>>(0.57) <<E>>(0.20) pei(0.80)
+[L25] <<me:>>(0.60) 95(0.96) of(1.00) which(1.00) were(0.99) to(1.00) defray(0.97) <<the>>(0.67) <<Expences>>(0.61) <<N.>>(0.39)

@@ -1,0 +1,69 @@
+# Inkference — HF Docker Space for the FULL corpus (all 6 books, ~923 pages).
+#
+# Differences from the Book-1 Dockerfile:
+#   * Bakes the PREBUILT DB + FAISS index (app/deploy/seed_data) — no boot re-seed,
+#     so cold start is instant even for 923 pages.
+#   * Page scans are NOT baked (1.3 GB). They're served by redirecting to a public
+#     HF dataset via the INKFERENCE_IMAGES_BASE_URL Space variable.
+#   * Live upload (Kraken + TrOCR + confidence + Groq correction) still works.
+#
+# HF builds the repo-ROOT Dockerfile, so the deploy script copies this to ./Dockerfile.
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libgl1 libglib2.0-0 && rm -rf /var/lib/apt/lists/*
+RUN useradd -m -u 1000 user
+WORKDIR /app
+
+# Full pipeline deps (Kraken + TrOCR + RAG + API) so live upload works.
+COPY app/deploy/requirements-space.txt .
+RUN pip install --no-cache-dir -r requirements-space.txt
+
+COPY app/pyproject.toml ./
+COPY app/src/ ./src/
+COPY app/frontend/ ./frontend/
+RUN pip install --no-cache-dir -e . --no-deps && \
+    mkdir -p /data && chown -R user:user /app /data
+
+ENV INKFERENCE_DATA_ROOT=/data \
+    HF_HOME=/home/user/.cache/huggingface \
+    PORT=7860 \
+    INKFERENCE_LOG_LEVEL=INFO \
+    # recognition (live upload)
+    TROCR_MODEL_ID=microsoft/trocr-base-handwritten \
+    HTR_MAX_LONG_EDGE=1600 \
+    HTR_NUM_BEAMS=1 \
+    # post-correction via Groq (GROQ_API_KEY secret)
+    CORRECTION_ENABLED=true \
+    CORRECTION_BACKEND=api \
+    CORRECTION_API_BASE=https://api.groq.com/openai/v1 \
+    CORRECTION_API_MODEL=qwen/qwen3-32b \
+    # Ask-the-Archive: Groq -> Gemini fallback -> extractive
+    LLM_PROVIDER=groq \
+    LLM_MODEL=openai/gpt-oss-120b \
+    LLM_FALLBACK=gemini:gemini-2.5-flash-lite \
+    RAG_USE_CORRECTED=true \
+    # dataset holding the prebuilt corpus (seed_data/) AND the scans (book*/forster*/)
+    SEED_DATASET=sajitkun125/inkference-book-images
+# REQUIRED Space secrets: GROQ_API_KEY, GEMINI_API_KEY
+# REQUIRED Space variable (page scans): INKFERENCE_IMAGES_BASE_URL=
+#   https://huggingface.co/datasets/<user>/inkference-book-images/resolve/main
+# (uploaded pages save absolute paths under /data and are served directly.)
+
+USER user
+
+# Pre-download embedding (RAG) + base recognition (upload) models for a fast first request.
+RUN python -c "from sentence_transformers import SentenceTransformer as S; S('sentence-transformers/all-MiniLM-L6-v2')"
+RUN python -c "from transformers import TrOCRProcessor, VisionEncoderDecoderModel as M; TrOCRProcessor.from_pretrained('microsoft/trocr-base-handwritten'); M.from_pretrained('microsoft/trocr-base-handwritten')"
+
+# Fetch the prebuilt DB + FAISS index from the dataset. snapshot_download RESOLVES LFS
+# to real bytes (unlike the Space's Docker build, which ships LFS as pointers). Only the
+# seed_data/ folder is pulled — the 1.3 GB scans stay remote and stream via the CDN.
+RUN python -c "import os; from huggingface_hub import snapshot_download; \
+snapshot_download(os.environ['SEED_DATASET'], repo_type='dataset', \
+allow_patterns=['seed_data/*'], local_dir='/app/hub')"
+
+EXPOSE 7860
+
+# Copy the prebuilt corpus into the (ephemeral) data root on boot, then serve. No re-seed.
+CMD ["sh", "-c", "cp -rn /app/hub/seed_data/. /data/ 2>/dev/null || true; uvicorn inkference.api.main:app --host 0.0.0.0 --port ${PORT:-7860}"]

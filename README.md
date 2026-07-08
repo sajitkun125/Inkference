@@ -1,188 +1,93 @@
-[![Shipping files](https://github.com/neuefische/ds-ml-project-template/actions/workflows/workflow-02.yml/badge.svg?branch=main&event=workflow_dispatch)](https://github.com/neuefische/ds-ml-project-template/actions/workflows/workflow-02.yml)
+# Inkference
 
-# Template Repo for ML Project
+**Inkference** turns handwritten manuscripts into a searchable, question-answerable
+archive. It was built on the six-book manuscript journal of **Johann Reinhold Forster**,
+the naturalist on Captain Cook's second voyage (1772–1775) — ~923 pages of 18th-century
+handwriting — but the pipeline works on any handwritten scans.
 
-This template repo will give you a good starting point for your second project. Besides the files used for creating a virtual environment, you will find a simple example of how to build a simple model in a python script. This is maybe the simplest way to do it. We train a simple model in the jupyter notebook, where we select only some features and do minimal cleaning. The output is then stored in simple python scripts.
+It combines **HTR** (handwritten text recognition) with **RAG** (retrieval-augmented
+generation): every page is segmented, transcribed, confidence-scored, LLM-proofread, and
+indexed so you can read it side-by-side with the scan or just *ask the archive* a question.
 
-The data used for this is: [coffee quality dataset](https://github.com/jldbc/coffee-quality-database).
+## The three views
 
----
+| View | What it does |
+|---|---|
+| **Reader** | Scan next to its transcription; per-word **confidence tinting**, page-average %, and a Raw ⟷ Corrected toggle (green = LLM edits). Page navigation is cyclic. |
+| **Ask the Archive** | Ask a natural-language question; get a grounded answer with **source-page citations**, or an in-character **"Answer as Author"** (Forster) response. |
+| **Upload** | Drop new scans → live pipeline (**Segmentation → Recognition → Confidence → Correction**) with line-box overlays and a progress stepper. |
 
-## Set up a Kanban board on github
+## How it works
 
-Go to ML-Project Template.
+- **Segmentation** — Kraken `blla` baseline segmentation into line polygons.
+- **Recognition** — fine-tuned **TrOCR** (base, Bentham-trained) with **per-word confidence**.
+- **Post-correction** — page-level, few-shot LLM proofreading (Qwen via Groq) that fixes OCR
+  errors while preserving archaic spelling; corrected words keep their confidence tint.
+- **RAG** — `all-MiniLM-L6-v2` embeddings + **FAISS** retrieval → grounded answer from a
+  free-tier LLM (Groq `gpt-oss-120b` → Gemini fallback → extractive), with page citations.
+- **Serving** — **FastAPI** backend + static frontend; **SQLite** store; background ingest jobs.
 
-1. Click on "Use this Template" (Blue button)
-![alt text](./images/step_1a_new.png)
+The application lives in [`app/`](app/); the original HTR research (notebooks, data, models)
+remains at the repo root.
 
-1. Create new repository with relevant name, the owner should be your own account. 
-![alt text](./images/step_2_new.png)
-
-1. In your newly create repo, navigate to "Projects", and then click on "Link a project" (blue button). Normally you don't have created a project yet, so you can click the arrow navigation to create project on your profile. This project can be added at the end to your repository.
-![alt text](./images/add_project_new.png)
-
-
-4.  You will be guided to your profiles projects and it will be shown a create project window. Choose "board" view and **not** "table" view.
- ![alt text](./images/choose_board.png)
-5. Now change the name of your board, to match that of your chosen ML project. Then click "Create project" blue button. Great you create Kanban Board
-![alt text](./images/create_project_new.png)
-
-6. Next, assign rights to all your team members by clicking on the 3 dots on the top right of the board, and then go to "Settings".
-![alt text](./images/kanban_settings.png)
-
-
-7. Next, click on "Manage Access". Add your team mates by Searching for their github handle in the search window.Change their Role from ‘Write’ to ‘Admin’. Click on the blue button “Invite” to add them. Repeat for all team members.
-![alt text](./images/team_access_new.png
-)
-
-8. Next,go back to the kanban board and at the bottom  add action items with the relevant name e.g. “load data”, "get statistics", etc.
-![alt text](./images/load_data_item.png
-)
-
-
-9. Convert added item to issue by clicking on the 3 dots on the particular added item.
-![alt text](./images/convert_to_issue.png
-)
-
-10. Then select the repo you created  for the issue to be added. (Select the project repo example “my-project-name”)
-![alt text](./images/select_repo.png
-)
-
-11. When in project repo, Go to issues, then go to milestones. 
-![alt text](./images/to_milestones.png
-)
-
-12. Click on ”New milestone”.
-
-13. Give the milestone a due date and description as per the example provided by the coaches. Add description of: 
-
-    A) What needs to be completed to be done with the milestone
-
-    B) The definition of done: what will your result look like when you have completed the milestone? (check the provided format)
-![alt text](./images/new_milestone.png)
-
-14. Now navigate to "issues".
-
-15. Assign issues to milestones 
-![alt text](./images/milestone_to_issue_new.png)
-
-16. Give it assignees (people who will work on the task). 
-![alt text](./images/milestone_to_someone.png)
-
-### Optional: Add workflows
-
-Workflows can help you keep your kanban board automatically on track. 
-
-Select the project created in the steps above.  
-
-Click on the 3 dots to the far right of the board (...)
-
-Select workflow as the first option. 
-
-Activate the ones you feel necessary to your project
-
-Go back to your project repository (fraud detection))
-
-## Set up your Environment
-
-
-
-### **`macOS`** type the following commands : 
-
-- For installing the virtual environment you can either use the [Makefile](Makefile) and run `make setup` or install it manually with the following commands:
-
-     ```BASH
-    make setup
-    ```
-    After that active your environment by following commands:
-    ```BASH
-    source .venv/bin/activate
-    ```
-Or ....
-- Install the virtual environment and the required packages by following commands:
-
-    ```BASH
-    pyenv local 3.11.3
-    python -m venv .venv
-    source .venv/bin/activate
-    pip install --upgrade pip
-    pip install -r requirements.txt
-    ```
-    
-### **`WindowsOS`** type the following commands :
-
-- Install the virtual environment and the required packages by following commands.
-
-   For `PowerShell` CLI :
-
-    ```PowerShell
-    pyenv local 3.11.3
-    python -m venv .venv
-    .venv\Scripts\Activate.ps1
-    python -m pip install --upgrade pip
-    pip install -r requirements.txt
-    ```
-
-    For `Git-bash` CLI :
-  
-    ```BASH
-    pyenv local 3.11.3
-    python -m venv .venv
-    source .venv/Scripts/activate
-    python -m pip install --upgrade pip
-    pip install -r requirements.txt
-    ```
-
-    **`Note:`**
-    If you encounter an error when trying to run `pip install --upgrade pip`, try using the following command:
-    ```Bash
-    python.exe -m pip install --upgrade pip
-    ```
-
-
-   
-## Usage
-
-In order to train the model and store test data in the data folder and the model in models run:
-
-**`Note`**: Make sure your environment is activated.
+## Run the app locally
 
 ```bash
-python example_files/train.py  
+# 1. Environment
+python -m venv .venv && source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt && pip install -e ./app
+
+# 2. Start the server (reads app/.env for data root, model, and API keys)
+uvicorn inkference.api.main:app --port 8000
+
+# 3. Open http://127.0.0.1:8000
 ```
 
-In order to test that predict works on a test set you created run:
+The seeded corpus (DB + FAISS index) loads on startup; page scans resolve from
+`INKFERENCE_IMAGES_ROOT`. To (re)build the corpus or deploy to a free Hugging Face Space,
+see [`app/README.md`](app/README.md). Design notes and the build log are in
+[`projectNotes/`](projectNotes/).
 
-```bash
-python example_files/predict.py models/linear_regression_model.sav data/X_test.csv data/y_test.csv
-```
+## Using it
 
-## Limitations
+1. **Reader** — flip through pages; toggle Raw/Corrected; hover low-confidence words to see scores.
+2. **Ask the Archive** — type a question (e.g. *"What did Forster note about the weather?"*);
+   answers cite the pages they came from. Try **Answer as Author** for an in-character reply.
+3. **Upload** — drag in a scan; watch the four-stage pipeline; the new page joins the Reader
+   and the search index automatically. (On free CPU, a page takes a few minutes.)
 
-Development libraries are part of the production environment, normally these would be separate as the production code should be as slim as possible.
+## Research notebooks
 
+[`notebooks/`](notebooks/) holds the research that produced the segmentation settings and the
+fine-tuned recognizer the app uses. Suggested reading order (it mirrors the pipeline):
 
----
+1. **Segment** — [`segmentManualTranscriptionsIntoLinesWithKraken.ipynb`](notebooks/segmentManualTranscriptionsIntoLinesWithKraken.ipynb)
+   → cut manuscript pages into line images with Kraken.
+2. **Organize & label** — [`organizeLinesIntoFinalTranscriptionFolders.ipynb`](notebooks/organizeLinesIntoFinalTranscriptionFolders.ipynb),
+   [`writeGroundTruthForB6P060.ipynb`](notebooks/writeGroundTruthForB6P060.ipynb),
+   [`visualizeFinalTranscriptionLinesAndGT.ipynb`](notebooks/visualizeFinalTranscriptionLinesAndGT.ipynb)
+   → build line/ground-truth pairs and eyeball them.
+3. **EDA & modeling** — [`edaAndModelingOcrVersionForGPU.ipynb`](notebooks/edaAndModelingOcrVersionForGPU.ipynb)
+   → the core TrOCR training/inference loop.
+4. **Cross-dataset training** — `cross_validation*.ipynb`, `downloadBullingerTrainAndTestData.ipynb`,
+   `fineTuneTrOcrCheckPointWithReadOrGermanDataSet*.ipynb`, `furtherfinetuningTrOcrWithBulliger*.ipynb`,
+   `zeroShotEvalReadCheckpointOnBullingerGerman.ipynb`
+   → pre-train/evaluate on public HTR corpora (Bentham, Bullinger, READ/German, Washington).
+5. **Target-domain fine-tuning** — [`notebooks/captainCookManualTranscriptsNotebooks/`](notebooks/captainCookManualTranscriptsNotebooks/):
+   `zeroShotTrocrBaseUsingGoogleColab` (baseline) → `finetuneTrocrBase`/`finetuneTrocrLarge`/
+   `finetuneBenthamCheckpoint` (the winning lineage → `models/trocr_best_from_bentham`) →
+   [`compareExperimentResults.ipynb`](notebooks/captainCookManualTranscriptsNotebooks/compareExperimentResults.ipynb)
+   → CER/WER comparison that picked the production checkpoint.
 
-## Handling Merge Conflicts in Jupyter Notebooks
+**Navigating them:** notebooks ending in `…FromGoogleColabDrive` / `…FromDrive` / `…UsingGoogleColab`
+are the **GPU (Google Colab)** versions — open them in Colab with the datasets mounted from Drive;
+the plain-named ones run locally. Training notebooks expect the public HTR datasets and a GPU;
+the segmentation/organization/visualization notebooks run on CPU against
+[`transcriptions/`](transcriptions/) and [`data/`](data/). The extracted, importable version of
+this logic lives in [`app/src/inkference/htr/`](app/src/inkference/htr/).
 
-When working in teams, `.ipynb` files can cause messy merge conflicts because they’re JSON-based.  
-We use **nbdime** to make this easy.
+## Tech stack
 
-### Setup (run once)
-```bash
-nbdime config-git --enable
-```
-
-### When a conflict happens
-```bash
-nbdime mergetool
-```
-
-A web interface will open showing both notebook versions side by side.
-Choose what to keep, save and close tool, then:
-```bash
-git add your_notebook.ipynb
-git commit -m "Resolved notebook conflict"
-```
-That’s it — clean merges for notebooks!
+Python · FastAPI · PyTorch · Transformers (TrOCR) · Kraken · sentence-transformers · FAISS ·
+SQLite · Groq / Gemini APIs · vanilla HTML/CSS/JS · Docker (Hugging Face Space).

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inkference</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- ===== Header ===== -->
+  <header class="app-header">
+    <div class="brand">
+      <div class="brand-mark">I</div>
+      <div class="brand-name">Inkference</div>
+    </div>
+    <div class="divider"></div>
+    <div class="doc-subtitle" id="doc-subtitle">—</div>
+    <div class="spacer"></div>
+    <nav class="tabs">
+      <button class="tab active" data-view="reader">Reader</button>
+      <button class="tab" data-view="ask">Ask the Archive</button>
+      <button class="tab" data-view="upload">Upload</button>
+    </nav>
+  </header>
+
+  <!-- ===== Reader ===== -->
+  <main class="view" id="view-reader">
+    <section class="scan-pane">
+      <div class="scan-toolbar">
+        <div class="pager">
+          <button id="prev-page" class="icon-btn">‹</button>
+          <span>Page <b id="page-cur">–</b> <span class="muted" id="page-total">/ –</span></span>
+          <button id="next-page" class="icon-btn">›</button>
+        </div>
+        <div class="zoom muted">manuscript scan</div>
+      </div>
+      <div class="scan-stage">
+        <img id="scan-img" alt="page scan" />
+        <div class="scan-empty muted" id="scan-empty">No scan for this page</div>
+      </div>
+      <div class="scan-caption muted">
+        <span id="scan-name">—</span>
+        <span id="scan-dims"></span>
+      </div>
+    </section>
+
+    <section class="paper-pane">
+      <div class="paper-header">
+        <div>
+          <div class="paper-title">Transcription</div>
+          <div class="muted" id="trans-sub">Machine reading</div>
+        </div>
+        <div class="header-right">
+          <div class="view-toggle" id="view-toggle" style="display:none">
+            <span class="toggle-opt" data-view="raw">Raw</span>
+            <span class="toggle-opt active" data-view="corrected">Corrected</span>
+          </div>
+          <div class="conf-readout">
+            <div class="conf-pct"><span id="avg-conf">–</span><span class="pct">%</span></div>
+            <div class="conf-label">avg. confidence</div>
+          </div>
+        </div>
+      </div>
+      <div class="legend">
+        <span class="legend-cap">Reading confidence</span>
+        <span class="muted small">high</span>
+        <div class="legend-bar"></div>
+        <span class="muted small">low</span>
+        <div class="spacer"></div>
+        <span class="small" id="lowconf-count"></span>
+      </div>
+      <div class="transcription" id="transcription"></div>
+    </section>
+  </main>
+
+  <!-- ===== Ask the Archive ===== -->
+  <main class="view hidden" id="view-ask">
+    <div class="chat-wrap">
+      <div class="thread" id="thread">
+        <div class="intro"><span id="ask-banner">Answers are drawn from the transcribed pages of this document</span></div>
+      </div>
+      <div class="dock-area">
+        <div class="suggestions" id="suggestions">
+          <span class="chip-suggest" data-q="What happened at Plymouth?">What happened at Plymouth?</span>
+          <span class="chip-suggest" data-q="Describe the weather and the ship">Describe the weather and the ship</span>
+          <span class="chip-suggest" data-q="Summarise this voyage">Summarise this voyage</span>
+        </div>
+        <div class="dock">
+          <input id="ask-input" placeholder="Ask anything about this document…" />
+          <button id="ask-cook" class="cook-btn" title="Answer in the voice of the author">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"></circle><path d="M15.5 8.5l-2 5-5 2 2-5z" fill="currentColor"></path></svg>
+            Answer as Author
+          </button>
+          <button id="ask-send" class="send-btn" title="Ask">↑</button>
+        </div>
+        <div class="disclaimer muted">Inkference can make mistakes. Verify answers against the cited pages.</div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ===== Upload & Process ===== -->
+  <main class="view hidden" id="view-upload">
+    <section class="scan-pane">
+      <div class="dropzone" id="dropzone">
+        <div class="drop-icon">⤓</div>
+        <div>
+          <div class="drop-title">Drop scanned pages to ingest</div>
+          <div class="muted small">JPEG, PNG · processed live on free CPU (slow)</div>
+        </div>
+        <label class="browse-btn">Browse<input type="file" id="file-input" accept="image/*" multiple hidden></label>
+      </div>
+      <div class="active-detail">
+        <div class="muted small" id="ingest-status">Awaiting upload</div>
+        <div class="active-preview">
+          <img id="ingest-img" alt="processing page" />
+          <div class="seg-overlay" id="seg-overlay"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="paper-pane">
+      <div class="paper-header">
+        <div>
+          <div class="paper-title">Batch ingestion</div>
+          <div class="muted" id="batch-sub">Live CPU pipeline</div>
+        </div>
+        <div class="model-card">
+          <div class="model-name"><span class="dot"></span><span id="model-name">Fine-tuned TrOCR</span></div>
+          <div class="muted small" id="model-meta">Segmentation → Recognition → Confidence → Correction</div>
+        </div>
+      </div>
+      <div class="stepper" id="stepper">
+        <div class="step" data-stage="segmentation"><span class="step-dot">1</span> Segmentation</div>
+        <div class="step-line"></div>
+        <div class="step" data-stage="recognition"><span class="step-dot">2</span> Recognition</div>
+        <div class="step-line"></div>
+        <div class="step" data-stage="confidence"><span class="step-dot">3</span> Confidence</div>
+        <div class="step-line"></div>
+        <div class="step" data-stage="correction"><span class="step-dot">4</span> Correction</div>
+      </div>
+      <div class="queue" id="queue"></div>
+      <div class="upload-footer">
+        <span class="muted small">Low-confidence lines are flagged for review.</span>
+        <button class="primary-btn" id="open-reader">Open in Reader</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

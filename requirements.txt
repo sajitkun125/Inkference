@@ -1,12 +1,37 @@
-altair==5.0.1
-jupyterlab==3.6.3
-ipywidgets==8.0.6
-matplotlib==3.7.1
-seaborn==0.12.2
-numpy==1.24.3
-pandas==2.0.1
-jupyterlab-dash==0.1.0a3
-scikit-learn==1.2.2
-statsmodels==0.13.5
-pytest==7.3.1
-nbdime==4.0.2
+# Python 3.11 or 3.12 recommended
+transformers==5.10.2
+# torch/torchvision are pinned to what Kraken 7.0.2 requires (it downgraded them
+# from 2.12.0/0.27.0). TrOCR + sentence-transformers verified working on 2.10.
+torch==2.10.0
+torchvision==0.25.0
+Pillow==11.3.0
+numpy==2.4.4
+pandas==3.0.3
+matplotlib==3.10.9
+seaborn==0.13.2
+jupyterlab==4.4.0
+requests==2.34.2
+accelerate==1.13.0
+evaluate==0.4.6
+jiwer==4.0.0
+sentencepiece==0.2.1
+tiktoken==0.13.0
+protobuf==7.35.0
+# Line segmentation (segmentManualTranscriptionsIntoLinesWithKraken.ipynb).
+# Kraken pins its own torch/numpy — install in a dedicated venv if it conflicts with the above.
+kraken==7.0.2
+# DocLayout-YOLO layout pre-filter (DocStructBench weights fetched from the Hub at runtime).
+# huggingface_hub is a transitive dep (transformers/doclayout-yolo) — left unpinned to resolve.
+doclayout-yolo==0.0.4
+
+# --- Inkference platform: RAG (Phase 4) ---
+sentence-transformers==5.6.0
+faiss-cpu==1.14.3
+scikit-learn==1.9.0
+scipy==1.17.1
+
+# --- Inkference platform: API backend (Phase 5) ---
+fastapi==0.138.2
+uvicorn[standard]==0.49.0
+python-multipart==0.0.32
+pydantic==2.13.4
