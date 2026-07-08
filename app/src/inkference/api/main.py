@@ -13,6 +13,7 @@ Endpoints (see projectNotes/inkference_platform_plan.md):
 """
 from __future__ import annotations
 
+import logging
 import os
 import re
 import unicodedata
@@ -20,18 +21,38 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from ..config import (
     FRONTEND_DIR,
+    IMAGES_BASE_URL,
+    IMAGES_ROOT,
     correction as correction_cfg,
     htr as htr_cfg,
     rag as rag_cfg,
 )
 from ..rag.answer import answer_question
 from . import services
+
+
+def _setup_logging() -> None:
+    """Route all `inkference.*` loggers to the console at INKFERENCE_LOG_LEVEL
+    (default INFO; set DEBUG for verbose). Independent of uvicorn's own loggers."""
+    level = os.getenv("INKFERENCE_LOG_LEVEL", "INFO").upper()
+    lg = logging.getLogger("inkference")
+    lg.setLevel(level)
+    if not lg.handlers:
+        h = logging.StreamHandler()
+        h.setFormatter(logging.Formatter(
+            "%(asctime)s [%(levelname)s] %(name)s: %(message)s", "%H:%M:%S"))
+        lg.addHandler(h)
+        lg.propagate = False
+
+
+_setup_logging()
+logger = logging.getLogger("inkference.api")
 
 app = FastAPI(title="Inkference", version="0.1.0")
 
@@ -41,6 +62,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def _no_cache_frontend(request, call_next):
+    """Tell browsers to revalidate the static frontend so edits (js/css/html)
+    always load fresh instead of serving a stale cached bundle."""
+    response = await call_next(request)
+    if not request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
 
 
 # --------------------------------------------------------------------------- #
@@ -55,6 +86,7 @@ class CreateDocument(BaseModel):
 class AskRequest(BaseModel):
     question: str
     top_k: int | None = None
+    persona: str | None = None  # "cook" -> answer in character as Captain Cook
 
 
 def _slugify(text: str) -> str:
@@ -150,9 +182,22 @@ def get_page(doc_id: int, page_number: int) -> dict:
 @app.get("/api/documents/{doc_id}/pages/{page_number}/image")
 def get_page_image(doc_id: int, page_number: int):
     path = services.get_store().get_page_image_path(doc_id, page_number)
-    if not path or not Path(path).exists():
+    if not path:
         raise HTTPException(404, "page image not found")
-    return FileResponse(path)
+    p = Path(path)
+    # Page NUMBERS are reused across uploads/reseeds, so /pages/{n}/image can map to
+    # different bytes over time. Forbid browser caching so a reused number never serves
+    # a stale scan (the "correct transcript but wrong old page image" bug).
+    no_cache = {"Cache-Control": "no-cache, no-store, must-revalidate"}
+    # Remote images (deployment): redirect relative keys to a CDN/dataset base URL
+    # so large image sets don't need to be baked into the app.
+    if IMAGES_BASE_URL and not p.is_absolute():
+        return RedirectResponse(f"{IMAGES_BASE_URL.rstrip('/')}/{path}", headers=no_cache)
+    # Local: absolute path (self-contained seeds) or relative key under IMAGES_ROOT.
+    for candidate in (p, (IMAGES_ROOT / path) if IMAGES_ROOT else None):
+        if candidate and candidate.exists():
+            return FileResponse(candidate, headers=no_cache)
+    raise HTTPException(404, "page image not found")
 
 
 # --------------------------------------------------------------------------- #
@@ -165,8 +210,11 @@ def ask(doc_id: int, body: AskRequest) -> dict:
         raise HTTPException(404, "document not found")
     index = services.get_index()
     if not index.exists(doc_id):
+        logger.info("building RAG index for doc %s", doc_id)
         index.build_from_store(doc_id, store)
-    ans = answer_question(doc_id, body.question, index, top_k=body.top_k)
+    logger.info("ask doc=%s persona=%s q=%r", doc_id, body.persona, body.question[:100])
+    ans = answer_question(doc_id, body.question, index, top_k=body.top_k, persona=body.persona)
+    logger.info("ask doc=%s -> sources=%s", doc_id, ans.source_pages)
     return ans.to_dict()
 
 

@@ -24,7 +24,6 @@
       <button class="tab" data-view="ask">Ask the Archive</button>
       <button class="tab" data-view="upload">Upload</button>
     </nav>
-    <div class="avatar">EH</div>
   </header>
 
   <!-- ===== Reader ===== -->
@@ -91,7 +90,11 @@
         </div>
         <div class="dock">
           <input id="ask-input" placeholder="Ask anything about this document…" />
-          <button id="ask-send" class="send-btn">↑</button>
+          <button id="ask-cook" class="cook-btn" title="Answer in the voice of the author">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"></circle><path d="M15.5 8.5l-2 5-5 2 2-5z" fill="currentColor"></path></svg>
+            Answer as Author
+          </button>
+          <button id="ask-send" class="send-btn" title="Ask">↑</button>
         </div>
         <div class="disclaimer muted">Inkference can make mistakes. Verify answers against the cited pages.</div>
       </div>

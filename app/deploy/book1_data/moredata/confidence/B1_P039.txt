@@ -1,0 +1,27 @@
+=== Buch 1, Seite 039 ===
+SCHWELLE: 0.7
+UNSICHERE_WÖRTER: 19 von 152
+
+[L01] <<6>>(0.36)
+[L02] ness(1.00) &(1.00) told,(1.00) that(1.00) I(1.00) thought(1.00) my(1.00) present(0.78)
+[L03] situation(0.77) so(0.84) happy,(1.00) that(1.00) no(1.00) other(1.00) wish(0.99)
+[L04] was(1.00) left(1.00) to(1.00) me(1.00) than,(0.99) that(0.85) <<this>>(0.54) <<worship>>(0.28)
+[L05] would(0.92) be(1.00) pleased(0.93) to(1.00) continue(1.00) to(1.00) me(1.00) his(1.00)
+[L06] protection(0.93) &(1.00) favour.(0.99) He(1.00) said(1.00) he(1.00) <<expected>>(0.45)
+[L07] the(1.00) Resolution(1.00) that(1.00) night(1.00) in(1.00) Plymouth(1.00)
+[L08] sound(0.84) &(1.00) in(1.00) that(1.00) case,(1.00) wished(1.00) to(1.00) see(1.00)
+[L09] me(0.95) on(1.00) board(1.00) of(1.00) her,(1.00) between(0.96) five(0.99)
+[L10] &(0.97) Sir.(0.79) After(1.00) having(1.00) <<conversed>>(0.69) with(1.00) <<his>>(0.44)
+[L11] <<aordship>>(0.57) for(0.99) about(1.00) <<4>>(0.34) of(1.00) <<&>>(0.42) hour.(0.99) he(1.00)
+[L12] went(1.00) in(0.98) his(1.00) <<large>>(0.39) to(1.00) the(1.00) dock-yard(0.82)
+[L13] &(0.90) took(1.00) me(1.00) along(1.00) with(1.00) him,(1.00) &(1.00) went(1.00)
+[L14] through(1.00) the(1.00) whole(1.00) <<yard>>(0.56) with(1.00) me(0.95) &(1.00)
+[L15] <<whether>>(0.28) he(0.96) thought(1.00) an(1.00) explication(0.97)
+[L16] of(0.98) the(1.00) various(1.00) objects(0.98) to(0.75) works(0.72) might(0.75)
+[L17] <<A>>(0.27) necessary,(1.00) he(1.00) was(1.00) pleased(0.93) to(1.00) give(0.90)
+[L18] <<me>>(0.63) the(1.00) fullest(0.76) Information(0.98) of(1.00) every(0.98)
+[L19] thing.(0.94) after(0.77) one(1.00) o'clock(0.98) His(0.71) <<Lochip>>(0.44)
+[L20] went(0.99) on(1.00) board(1.00) the(1.00) <<barge>>(0.69) &(1.00) <<recommend>>(0.31)
+[L21] me(1.00) to(1.00) be(1.00) at(1.00) six(1.00) on(1.00) board(1.00) the(0.87) Resolution(1.00)
+[L22] in(1.00) <<ease>>(0.60) she(1.00) should(1.00) arrive(1.00) before(1.00) that(1.00)
+[L23] <<Jim>>(0.39)

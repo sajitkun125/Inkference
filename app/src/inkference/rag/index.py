@@ -115,7 +115,35 @@ class RagIndex:
         return len(chunks)
 
     def build_from_store(self, doc_id: int, store: "DocumentStore") -> int:
-        return self.build(doc_id, store.iter_pages_text(doc_id))
+        # RAG_USE_CORRECTED (default True) -> index post-corrected text, else raw TrOCR.
+        return self.build(
+            doc_id,
+            store.iter_pages_text(doc_id, prefer_corrected=self.cfg.use_corrected_text),
+        )
+
+    def add_pages(self, doc_id: int, store: "DocumentStore", page_numbers: list[int]) -> int:
+        """Incrementally embed only `page_numbers` and append to the persisted index.
+
+        Rebuilding the whole index on every upload re-embeds the entire corpus (slow:
+        ~1s per 30 chunks). Appending just the new pages keeps ingestion fast regardless
+        of corpus size. Falls back to a full build if no index exists yet.
+        """
+        if not page_numbers or not self._ensure_loaded(doc_id) or self._index is None:
+            return self.build_from_store(doc_id, store)
+        wanted = set(page_numbers)
+        new_chunks: list[Chunk] = []
+        for page_number, text in store.iter_pages_text(
+            doc_id, prefer_corrected=self.cfg.use_corrected_text
+        ):
+            if page_number in wanted:
+                new_chunks.extend(chunk_page(page_number, text))
+        if not new_chunks:
+            return len(self._chunks)
+        vectors = self._embed([c.text for c in new_chunks])
+        self._index.add(vectors)
+        self._chunks.extend(new_chunks)
+        self._persist(doc_id)
+        return len(self._chunks)
 
     def _persist(self, doc_id: int) -> None:
         import faiss

@@ -1,0 +1,27 @@
+=== Buch 1, Seite 038 ===
+SCHWELLE: 0.7
+UNSICHERE_WÖRTER: 23 von 160
+
+[L01] &(1.00) from(1.00) which(1.00) towards(0.91) mount(0.87) Edgecombe(0.82) a(1.00) Ledge(0.82)
+[L02] of(1.00) rocks(0.96) extends.(0.94) This(0.98) Isle(1.00) is(1.00) <<so>>(0.41) <<hisied>>(0.63) &(0.94) is(0.99) a(1.00) mere(0.98)
+[L03] rock(0.90) <<with>>(0.60) a(1.00) few(1.00) houses,(0.94) in(1.00) which(1.00) a(1.00) gunner(0.83)
+[L04] &(1.00) a(1.00) few(1.00) <<soldiers>>(0.64) <<vice.>>(0.65) Here(1.00) <<Mr.>>(0.27) <<Deiley>>(0.41) <<that>>(0.69) <<stop.>>(0.44)
+[L05] norner,(0.70) who(1.00) was(1.00) intended(0.99) to(0.97) <<do>>(0.49) on(0.97) the(0.98) Expe(0.92)
+[L06] dition,(0.86) in(1.00) the(1.00) Adventure,(0.99) had(0.96) erected(0.97) his(1.00) <<ten>>(0.49)
+[L07] &(0.99) made(1.00) observations(0.97) of(1.00) equal(0.99) Altitudes,(0.89) &(1.00)
+[L08] afterwards(0.90) when(0.71) the(1.00) Resolution(1.00) arrived(1.00)
+[L09] <<Mr>>(0.56) Wales(0.88) joined(1.00) him(1.00) with(1.00) the(1.00) Transit-in-(1.00)
+[L10] strument,(0.89) &(1.00) they(1.00) settled(0.83) both(1.00) the(1.00) Latitude(1.00) &(0.98)
+[L11] Longitude(0.98) of(1.00) this(1.00) place-vig.(0.73)
+[L12] July(1.00) <<ye>>(0.31) <<ye>>(0.37) <<1st>>(0.50)
+[L13] went(1.00) on(1.00) board(1.00) the(1.00) <<Augusta-Shackt,>>(0.65) to(1.00) was(0.95)
+[L14] upon(1.00) Lord(1.00) Sandwich,(0.95) who(1.00) had(1.00) desired(0.99) <<Capi-sim->>(0.50)
+[L15] the(0.94) day(1.00) <<before>>(0.68)
+[L16] neaux,(0.71) to(0.93) let(0.83) me(1.00) know(0.99) he(1.00) wanted(1.00) to(0.99)
+[L17] speak(0.80) to(1.00) me.(1.00) His(1.00) Lordship(0.95) received(1.00) me(1.00)
+[L18] in(1.00) the(1.00) most(1.00) obliging(0.99) manner;(0.91) after(1.00)
+[L19] breakfast,(0.96) he(0.85) took(1.00) me(0.99) on(1.00) the(1.00) <<poop>>(0.55) of(1.00)
+[L20] the,(0.85) Vacht,(0.83) &(1.00) asked(1.00) me(1.00) <<respectedly,>>(0.69) whether(0.96)
+[L21] <<he>>(0.37) could(1.00) do(1.00) any(1.00) this(1.00) <<more>>(0.65) for(1.00) me,(0.72)
+[L22] <<&>>(0.20) thanked(0.98) his(0.98) Lordship(0.74) for(0.97) his(1.00) kind-(0.98)
+[L23] ness(0.99)

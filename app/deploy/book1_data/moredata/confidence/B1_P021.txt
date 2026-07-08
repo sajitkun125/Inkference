@@ -1,0 +1,26 @@
+=== Buch 1, Seite 021 ===
+SCHWELLE: 0.7
+UNSICHERE_WÖRTER: 18 von 124
+
+[L01] June(1.00) <<4.0Â°>>(0.54)
+[L02] <<de>>(0.20)
+[L03] <<there;>>(0.52) by(0.94) which(1.00) means(1.00) they(1.00) <<desquired>>(0.51) of(0.98)
+[L04] <<reconfiling>>(0.59) <<&>>(0.68) Sandwich(0.97)
+[L05] The(1.00) House(1.00) of(1.00) Commons(1.00) <<oro>>(0.62) <<ke>>(0.52) up(0.96) &(1.00)
+[L06] on(0.99) act(0.70) of(1.00) the(1.00) <<Infrequently>>(0.61) of(1.00) the(1.00)
+[L07] Members,(1.00) my(1.00) name(1.00) could(1.00) not(1.00) be(1.00)
+[L08] mentioned(0.98) in(1.00) the(1.00) house.(1.00)
+[L09] <<North>>(0.36) spoke(0.99) to(1.00) Mr(0.80) Barrington,(0.90) who(1.00)
+[L10] argued(0.87) the(1.00) case,(0.88) &(1.00) <<showed>>(0.51) that(1.00) as(0.98) the(1.00)
+[L11] resolution(0.94) of(1.00) the(1.00) house(1.00) had(1.00) not(0.98) d(0.72)
+[L12] lind's(0.78) name(0.99) mentioned,(0.99) the(1.00) many(0.98)
+[L13] could(0.99) be(1.00) applied(0.89) to(1.00) any(1.00) other(1.00) par-(0.95)
+[L14] son(0.98) <<giving>>(0.68) on(1.00) the(1.00) same(1.00) Expedition(1.00)
+[L15] <<North>>(0.68) having(0.99) mentioned(0.98) the(1.00) case(1.00)
+[L16] to(1.00) His(0.98) Majesty,(1.00) the(1.00) money(1.00) was(1.00) or-(1.00)
+[L17] dered(0.96) to(1.00) be(0.91) <<issued>>(0.18) to(0.97) me(0.99) from(1.00)
+[L18] His(0.99) Majesty's(0.86) civil(1.00) List(0.95) &(0.99) that(1.00)
+[L19] at(1.00) the(1.00) <<meeting>>(0.60) of(1.00) the(1.00) House(1.00)
+[L20] of(1.00) Commons(1.00) at(0.92) <<shows>>(0.70) be(0.99) decided(1.00)
+[L21] whether(0.93) the(1.00) money(0.99) should(1.00) go(1.00) to(1.00)
+[L22] <<mer>>(0.54) to(0.95) <<&>>(0.37) Lind(0.89)

@@ -47,6 +47,16 @@ FRONTEND_DIR = Path(os.getenv("INKFERENCE_FRONTEND_DIR", APP_ROOT / "frontend"))
 TRANSCRIPTIONS_ROOT = Path(
     os.getenv("INKFERENCE_TRANSCRIPTIONS_ROOT", PROJECT_ROOT / "transcriptions")
 )
+# Base dir for resolving RELATIVE page-image keys stored in the DB (e.g.
+# "book1/forster1/B1_P_012.jpg"). Lets one seeded DB stay portable: point this at
+# the local source (~/Downloads/AlexFiles) in dev, or the downloaded images dataset
+# (/app/book_images) on the Space. Absolute image paths in the DB are used as-is.
+_images_root = os.getenv("INKFERENCE_IMAGES_ROOT")
+IMAGES_ROOT = Path(_images_root) if _images_root else None
+# Alternative to IMAGES_ROOT for deployment: if set, relative image keys are served
+# by REDIRECTING to "{IMAGES_BASE_URL}/{key}" (e.g. a public HF dataset resolve URL),
+# so large image sets don't need to be baked into the Space image.
+IMAGES_BASE_URL = os.getenv("INKFERENCE_IMAGES_BASE_URL") or None
 
 
 @dataclass
@@ -108,10 +118,20 @@ class RAGConfig:
         )
     )
     top_k: int = field(default_factory=lambda: _env_int("RAG_TOP_K", 5))
-    # Provider for the written answer: gemini | groq | claude | openai
+    # Index the post-corrected text (True) or the raw TrOCR text (False). Corrected
+    # is cleaner -> better retrieval/answers; pages with no correction fall back to raw.
+    use_corrected_text: bool = field(
+        default_factory=lambda: _env_bool("RAG_USE_CORRECTED", True)
+    )
+    # Primary provider for the written answer: gemini | groq | claude | openai
     llm_provider: str = field(default_factory=lambda: os.getenv("LLM_PROVIDER", "gemini"))
     llm_model: str = field(default_factory=lambda: os.getenv("LLM_MODEL", ""))
     llm_api_key: str = field(default_factory=lambda: os.getenv("LLM_API_KEY", ""))
+    # Ordered fallback chain tried when the primary errors/rate-limits, as a
+    # comma-separated "provider:model" list. After all fail -> extractive fallback.
+    llm_fallback: str = field(
+        default_factory=lambda: os.getenv("LLM_FALLBACK", "gemini:gemini-2.5-flash-lite")
+    )
 
     _PROVIDER_KEYS = {
         "gemini": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
@@ -124,10 +144,28 @@ class RAGConfig:
         # If no explicit LLM_API_KEY, pull the key for the SELECTED provider so a
         # provider switch (e.g. gemini -> groq) uses the right key automatically.
         if not self.llm_api_key:
-            for env in self._PROVIDER_KEYS.get((self.llm_provider or "").lower(), ()):
-                if os.getenv(env):
-                    self.llm_api_key = os.getenv(env)
-                    break
+            self.llm_api_key = self.key_for(self.llm_provider)
+
+    def key_for(self, provider: str) -> str:
+        """Resolve the API key for a provider (used per-attempt in the chain)."""
+        provider = (provider or "").lower()
+        if self.llm_api_key and provider == (self.llm_provider or "").lower():
+            return self.llm_api_key
+        for env in self._PROVIDER_KEYS.get(provider, ()):
+            if os.getenv(env):
+                return os.getenv(env)
+        return ""
+
+    def attempts(self) -> list[tuple[str, str]]:
+        """Ordered (provider, model) attempts: primary first, then the fallback chain."""
+        out: list[tuple[str, str]] = [((self.llm_provider or "").lower(), self.llm_model)]
+        for part in self.llm_fallback.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            provider, _, model = part.partition(":")
+            out.append((provider.strip().lower(), model.strip()))
+        return out
 
 
 @dataclass

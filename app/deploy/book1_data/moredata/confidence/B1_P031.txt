@@ -1,0 +1,28 @@
+=== Buch 1, Seite 031 ===
+SCHWELLE: 0.7
+UNSICHERE_WÖRTER: 24 von 165
+
+[L01] <<12>>(0.24) <<hull,>>(0.64) with(1.00) a(1.00) few(1.00) openings(0.91) that(1.00) afford(1.00) a(1.00) <<most>>(0.48)
+[L02] romantic(0.94) prospect,(0.99) beyond(1.00) a(1.00) <<pale>>(0.46) <<on>>(0.64) the(1.00) <<nei>>(0.54)
+[L03] bouring(0.90) <<well>>(0.64) cultivated(0.97) hills.(1.00) This(0.91) walk(0.90) is(1.00)
+[L04] calledy(0.82) <<Naxon's>>(0.50) walk,(0.97) &(0.99) is(1.00) much(1.00) <<Army>>(0.10) <<ended>>(0.54)
+[L05] by(1.00) the(1.00) neutnphs(0.72) of(1.00) the(1.00) town,(1.00) especially(1.00)
+[L06] <<de>>(0.30)
+[L07] at(1.00) <<late>>(0.65) hours.(0.99) The(1.00) <<coarser>>(0.61) cloaths,(0.95) calli-(0.93)
+[L08] mancoes(0.98) &(1.00) other(1.00) <<Sergeo>>(0.51) &(0.92) stuffs,(0.83) which(0.99) are(0.99)
+[L09] here(1.00) manufactured(1.00) <<employ>>(0.68) a(1.00) good(1.00) number(1.00)
+[L10] at(1.00) poor(0.82) people(1.00) &(1.00) <<consume>>(0.67) the(1.00) wool(0.87) of(0.74)
+[L11] the(0.99) neighbourhood.(0.77)
+[L12] June(0.99) <<1928.>>(0.33) We(1.00) passed(1.00) some(1.00) very(0.98) high(1.00) hills(0.99) in(1.00) <<gay>>(0.53)
+[L13] to(1.00) Chudeigh(0.83) a(1.00) small(1.00) <<incomprehensible>>(0.63) town(1.00)
+[L14] The(1.00) same(1.00) aspect(1.00) of(1.00) the(1.00) country(1.00) is(1.00) between(1.00)
+[L15] the(1.00) latter(0.97) place(0.84) &(0.99) Ashburton(0.99) another(1.00)
+[L16] small(0.96) town.(0.98) The(1.00) Inn(1.00) we(1.00) put(1.00) up,(1.00) It(0.78) was(1.00) <<a>>(0.35)
+[L17] pied(0.98) by(0.99) a(1.00) Scotsman(0.81) called(0.93) Kenneth(1.00) <<A>>(0.58)
+[L18] who(1.00) overcharged(0.97) every(1.00) article(1.00) of(1.00) our(1.00)
+[L19] bad(0.82) fare,(0.95) &(1.00) gave(1.00) us(0.92) most(1.00) sorry(0.99) horses.(0.92)
+[L20] &(1.00) a(1.00) surely,(0.78) impudent(0.77) driver.(0.97) At(1.00) <<toy>>(0.47)
+[L21] bridge,(1.00) are(0.92) a(1.00) few(1.00) houses(1.00) &(1.00) two(0.97) inns,(0.71) one(0.99)
+[L22] on(1.00) each(1.00) side(0.95) the(1.00) bridge.(1.00) That(1.00) which(1.00) lie(0.81)
+[L23] on(1.00) the(1.00) <<casside>>(0.46) has(1.00) the(1.00) better(0.97) appearance(0.99)
+[L24] <<but>>(0.49)

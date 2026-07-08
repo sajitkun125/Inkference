@@ -1,0 +1,28 @@
+=== Buch 1, Seite 020 ===
+SCHWELLE: 0.7
+UNSICHERE_WÖRTER: 37 von 163
+
+[L01] pleased(0.83) to(1.00) approve(0.96) of(1.00) my(1.00) going(1.00) on(1.00) the(1.00)
+[L02] <<0>>(0.06) <<0>>(0.47)
+[L03] Canadian(0.88) &(1.00) by(1.00) this(1.00) 2(0.85) Sandwich(0.99) <<hardcore>>(0.36)
+[L04] any(0.91) further(0.99) application(0.98) from(1.00) Mr(0.99) Banks(0.80)
+[L05] <<side.>>(0.63)
+[L06] June(1.00) <<16th>>(0.47) The(1.00) <<Chief>>(0.61) Members(0.83) of(1.00) the(1.00) Council(1.00) of(1.00)
+[L07] <<Rural>>(0.57) Society(0.99) Signed(0.72) a(1.00) <<Certificate>>(0.43) in(1.00)
+[L08] my(1.00) favour,(0.98) recommending(0.80) me(1.00) as(1.00) a(1.00)
+[L09] <<poroner>>(0.40) <<person>>(0.39) for(1.00) going(1.00) on(1.00) the(1.00) Expedition(0.87)
+[L10] <<ane>>(0.28) <<ye>>(0.47) 7th(0.73) <<ill>>(0.21) Hudson(0.86) spoke(1.00) to(1.00) me(1.00) about(1.00) the(1.00) affair(1.00)
+[L11] June(0.91)
+[L12] &(0.96) told(0.99) me(1.00) that(1.00) he(1.00) had(0.99) recommended(0.99)
+[L13] me(0.99) to(1.00) <<met>>(0.69) <<Dy>>(0.37) <<son>>(0.65) &(1.00) to(0.95) Sir(1.00) Gilbert(0.99) <<Elliot>>(0.60)
+[L14] &(1.00) said,(1.00) that(1.00) as(0.99) there(0.95) had(0.99) been(1.00) an(1.00) <<inter>>(0.61)
+[L15] tion(0.99) to(1.00) make(1.00) a(1.00) motion(1.00) in(1.00) the(1.00) house(1.00)
+[L16] of(1.00) Commons(1.00) Friday(0.93) last(1.00) in(1.00) my(1.00) favour(0.81)
+[L17] Mr.(0.88) <<Thips>>(0.44) &(0.98) Mr(1.00) <<Burke>>(0.70) <<has>>(0.62) been(1.00) <<oil>>(0.17)
+[L18] ling(0.84) to(1.00) oppose(0.96) it;(0.98) &(1.00) that(1.00) it(1.00) would(1.00) <<cease>>(0.52)
+[L19] great(0.98) difficulties(1.00) in(0.97) regard(0.99) to(1.00) the(1.00) <<mono>>(0.25)
+[L20] <<MR>>(0.20) <<Burks,>>(0.61) Burke(0.72) <<&>>(0.55) <<Philips>>(0.37) wanted(1.00) to(1.00)
+[L21] have(1.00) an(1.00) <<interview>>(0.55) with(1.00) Mr(1.00) <<Hughes>>(0.26) Palliser(0.94)
+[L22] <<&>>(0.26) Mr(0.96) Stephens(1.00) at(1.00) the(1.00) Speakers,(0.99) but(1.00) <<LP>>(0.16)
+[L23] <<Sandwick>>(0.52) <<had>>(0.59) already(0.99) saw(0.84) the(1.00) <<streetess>>(0.67)
+[L24] <<ins>>(0.25) <<of>>(0.29) them,(0.99) not(1.00) to(1.00) go(0.96)
