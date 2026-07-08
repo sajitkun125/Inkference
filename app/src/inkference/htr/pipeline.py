@@ -26,6 +26,9 @@ if TYPE_CHECKING:  # pragma: no cover
 
 # progress(stage, fraction_0_to_1, message)
 ProgressCB = Callable[[Stage, float, str], None]
+# on_segmented(bboxes, page_width, page_height) — fired the instant segmentation
+# finishes so the UI can draw line boxes before recognition/confidence/correction.
+SegmentedCB = Callable[[list, int, int], None]
 
 
 def _noop(stage: Stage, frac: float, msg: str) -> None:  # pragma: no cover
@@ -53,14 +56,19 @@ class HTRPipeline:
         page: "Image.Image",
         page_number: int = 1,
         progress: ProgressCB = _noop,
+        on_segmented: "SegmentedCB | None" = None,
     ) -> PageResult:
         # --- Stage 1: segmentation ---------------------------------------- #
         progress(Stage.SEGMENTATION, 0.0, "Segmenting…")
         scaled, scale = downscale(page, self.cfg.max_page_long_edge)
         crops: list[LineCrop] = self.segmenter.segment(scaled)
-        progress(Stage.SEGMENTATION, 1.0, f"{len(crops)} lines detected")
-
         w, h = scaled.size
+        progress(Stage.SEGMENTATION, 1.0, f"{len(crops)} lines detected")
+        # Publish the boxes now (recognition/correction still to come) so the UI can
+        # overlay them immediately instead of waiting minutes for the full result.
+        if on_segmented is not None:
+            on_segmented([list(c.bbox) for c in crops], w, h)
+
         if not crops:
             return PageResult(page_number, w, h, lines=[], scale=scale)
 
@@ -125,9 +133,13 @@ class HTRPipeline:
         progress(Stage.CORRECTION, 1.0, "Complete")
 
     def process_path(
-        self, image_path: str | Path, page_number: int = 1, progress: ProgressCB = _noop
+        self,
+        image_path: str | Path,
+        page_number: int = 1,
+        progress: ProgressCB = _noop,
+        on_segmented: "SegmentedCB | None" = None,
     ) -> PageResult:
         from PIL import Image
 
         with Image.open(image_path) as im:
-            return self.process_image(im.copy(), page_number, progress)
+            return self.process_image(im.copy(), page_number, progress, on_segmented)

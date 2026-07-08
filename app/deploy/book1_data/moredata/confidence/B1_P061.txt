@@ -1,0 +1,28 @@
+=== Buch 1, Seite 061 ===
+SCHWELLE: 0.7
+UNSICHERE_WÖRTER: 17 von 187
+
+[L01] 28(0.98)
+[L02] July(0.99) <<14Â°>>(0.47) <<)>>(0.68) The(1.00) Ships(0.96) remained(0.98) in(1.00) <<company>>(0.69)
+[L03] the(1.00) weather(0.85) continued(0.93) fair,(0.99) the(1.00) wind(1.00) changed(1.00)
+[L04] to(0.96) W.H.W.(0.90) &(1.00) sometimes(1.00) W.(1.00) 6.(0.82) N.N.(0.81) <<nor>>(0.58) course(0.99) was(1.00) <<SM.>>(0.50) <<4>>(0.39)
+[L05] S.W.b.S.(0.87) In(0.99) the(1.00) Evening(0.99) at(1.00) 9(0.83) o'clock(1.00) we(1.00) bore(0.91)
+[L06] down(0.99) to(1.00) the(1.00) Adventure.(0.97) In(1.00) the(1.00) night(1.00) the(1.00)
+[L07] weather(1.00) became(0.99) cloudy(0.99) &(0.99) towards(1.00) morning(1.00)
+[L08] <<heavy>>(0.50) with(1.00) some(1.00) rain(1.00) at(0.98) 8(1.00) in(1.00) the(1.00) morning(1.00)
+[L09] we(1.00) fired(0.96) a(1.00) gun(1.00) for(1.00) the(1.00) Adventure,(1.00) after(1.00)
+[L10] having(1.00) racked,(0.75) directing(0.71) our(1.00) Course(0.96) West(0.82)
+[L11] S.S.(0.89) W.(0.79) SWW.(0.70) <<b.W>>(0.52) towards(1.00) noon(0.98) it(1.00) grew(0.99) foggy(0.91)
+[L12] &(1.00) only(1.00) light(1.00) airs.(0.86)
+[L13] July(0.99) of(0.89) 15th(0.99) We(0.97) met(1.00) with(1.00) a(1.00) <<larvae>>(0.63) Swell,(0.94) from(0.96)
+[L14] the(1.00) N.W.(0.92) &(0.99) towards(1.00) night(1.00) a(0.99) thick(0.99) fog(0.97) <<co>>(0.53) me(0.94) on(1.00)
+[L15] we(0.99) soon(1.00) found(1.00) that(1.00) we(1.00) were(1.00) approaching(0.94)
+[L16] the(1.00) Bay(0.88) of(1.00) Biscay,(0.96) by(1.00) the(1.00) great(1.00) waves.(0.97) I(1.00) had(1.00)
+[L17] been(1.00) seasick(0.81) ever(0.99) since(1.00) the(1.00) first(1.00) day(1.00) of(0.99) one(0.86)
+[L18] Voyage,(0.88) could(1.00) eat(1.00) very(1.00) little,(1.00) was(1.00) obliged(1.00) to(1.00)
+[L19] <<throw>>(0.61) up(1.00) <<any>>(0.52) Virtuals,(0.80) had(1.00) no(1.00) head.each(0.82)
+[L20] I(0.98) found(1.00) <<squash>>(0.22) much(1.00) better(1.00) &(1.00) greatly(0.97)
+[L21] relieved(0.81) by(1.00) some(1.00) mylled(0.95) <<Portwine,>>(0.67)
+[L22] We(1.00) tached(0.87) on(1.00) <<&>>(0.51) off(1.00) till(0.96)
+[L23] July(0.76) <<18,>>(0.66) when(0.99) we(1.00) began(1.00) to(1.00) make(1.00) our(0.99) course(1.00) directly(0.98)
+[L24] W.b.(0.85) W.(0.99) <<had>>(0.58) some(1.00) squalls(0.74) &(1.00) now(1.00) &(1.00) then(1.00) rain(0.98)

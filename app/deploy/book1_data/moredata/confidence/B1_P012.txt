@@ -1,0 +1,17 @@
+=== Buch 1, Seite 012 ===
+SCHWELLE: 0.7
+UNSICHERE_WÖRTER: 7 von 43
+
+[L01] ms.(0.99) germ.(0.83) <<quart.>>(0.55) 222(0.96)
+[L02] Journal(0.93) of(1.00) a(1.00) journey(0.99)
+[L03] from(1.00) London(0.95) to(1.00) Plymouth(0.99)
+[L04] <<&.>>(0.53) <<A>>(0.53) Voyage(1.00)
+[L05] on(1.00) board(1.00) his(1.00) Majesty's(1.00) Ship(1.00)
+[L06] the(1.00) <<Resolution>>(0.33)
+[L07] Captain(1.00) Cook(0.99) Commander(0.97)
+[L08] from(1.00) <<E>>(0.49) <<usmouth>>(0.45)
+[L09] to(0.98) the(1.00) Cape(1.00) of(1.00) good(0.98) Hope.(0.99)
+[L10] from(1.00) July(1.00) y.(0.75) <<13Â°November>>(0.60)
+[L11] Ex(0.98)
+[L12] ((0.88) Biblinth.(0.72) Regie(0.99)
+[L13] Berclines(0.78)

@@ -1,0 +1,28 @@
+=== Buch 1, Seite 017 ===
+SCHWELLE: 0.7
+UNSICHERE_WÖRTER: 31 von 165
+
+[L01] warning:(0.75) for(0.99) which(1.00) purpose,(0.83) <<still,>>(0.58) not(0.78)
+[L02] me(1.00) the(1.00) Question,(0.97) whether(1.00) he(1.00) could(0.97) <<brought>>(0.16)
+[L03] this(0.99) to(1.00) B(0.85) Sandwich.(0.86) I(0.73) said(1.00) I(1.00) would(1.00) en-(0.99)
+[L04] deavour(0.99) to(1.00) be(1.00) ready(1.00) in(1.00) a(1.00) few(1.00) days.(1.00) <<I>>(0.65)
+[L05] Juney(0.93) <<?>>(0.10) <<Mr>>(0.60) Barington(0.71) spoke(1.00) to(1.00) <<L.>>(0.53) Sandwich,(0.84) who(1.00)
+[L06] June(1.00)
+[L07] seemed(0.99) <<bleased>>(0.55) with(1.00) the(1.00) plan(1.00) &(1.00) my(1.00) cho-(0.93)
+[L08] <<raiter,>>(0.56) &(1.00) as(1.00) he(1.00) heard(1.00) of(1.00) my(1.00) <<reassness>>(0.35)
+[L09] <<hisLordship>>(0.52) was(1.00) still(1.00) more(1.00) released.(0.73)
+[L10] <<IT>>(0.31) <<Solander>>(0.52) told(1.00) me,(1.00) that(1.00) <<he>>(0.57)
+[L11] it(1.00) was(1.00) not(1.00) certain,(1.00) whether(1.00) Mr.(0.78) Banks(0.77)
+[L12] would(0.89) go(1.00) or(1.00) not;(0.98) but(1.00) that(1.00) it(1.00) would(1.00) be(1.00)
+[L13] decided,(1.00) next(0.99) <<Wiednesday>>(0.41) <<Irene>>(0.67) <<ye>>(0.64) 11th(0.78)
+[L14] or(0.86) then(0.71) Mr(0.71) Banks(0.86) would(0.90) have(1.00) a(1.00)
+[L15] <<mixate>>(0.48) Audience(0.99) of(0.91) his(1.00) Majesty(0.81)
+[L16] I(0.78) <<hat>>(0.64) my(0.73) <<day>>(0.57) at(0.94) the(1.00) Club(0.73) <<of>>(0.22) Banks(0.91) past(0.90) <<men's>>(0.43) that(0.81) in(0.76) their(0.73) was(0.91) made(1.00)
+[L17] in(1.00) <<into>>(0.24) <<my>>(0.46) <<recovery>>(0.43)
+[L18] I(0.84) <<Sandwin>>(0.62) <<suspecting>>(0.66) <<that>>(0.50) Mr(0.98) <<Banks>>(0.53)
+[L19] would(0.99) endeavour(0.73) to(1.00) obtain(1.00) <<a>>(0.63) new(0.81) Ship,(0.99)
+[L20] he(0.99) went(1.00) to(1.00) His(1.00) Majesty,(0.99) &(1.00) said(0.98) the(1.00) plan(1.00)
+[L21] of(1.00) sending(0.82) me,(0.97) on(1.00) the(1.00) Expedition,(0.99) with(1.00)
+[L22] the(1.00) Character(0.99) given(0.99) <<me>>(0.48) by(1.00) Mr.(0.73) Barrington(0.74)
+[L23] before(1.00) the(1.00) ring,(0.98) who(1.00) was(1.00) <<graciously>>(0.70)
+[L24] pleased(0.99)
