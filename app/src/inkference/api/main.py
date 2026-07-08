@@ -185,14 +185,18 @@ def get_page_image(doc_id: int, page_number: int):
     if not path:
         raise HTTPException(404, "page image not found")
     p = Path(path)
+    # Page NUMBERS are reused across uploads/reseeds, so /pages/{n}/image can map to
+    # different bytes over time. Forbid browser caching so a reused number never serves
+    # a stale scan (the "correct transcript but wrong old page image" bug).
+    no_cache = {"Cache-Control": "no-cache, no-store, must-revalidate"}
     # Remote images (deployment): redirect relative keys to a CDN/dataset base URL
     # so large image sets don't need to be baked into the app.
     if IMAGES_BASE_URL and not p.is_absolute():
-        return RedirectResponse(f"{IMAGES_BASE_URL.rstrip('/')}/{path}")
+        return RedirectResponse(f"{IMAGES_BASE_URL.rstrip('/')}/{path}", headers=no_cache)
     # Local: absolute path (self-contained seeds) or relative key under IMAGES_ROOT.
     for candidate in (p, (IMAGES_ROOT / path) if IMAGES_ROOT else None):
         if candidate and candidate.exists():
-            return FileResponse(candidate)
+            return FileResponse(candidate, headers=no_cache)
     raise HTTPException(404, "page image not found")
 
 

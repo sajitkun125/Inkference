@@ -8,6 +8,15 @@ const state = { doc: null, page: 1, totalPages: 0, pageData: null, readerView: n
 const $ = (sel) => document.querySelector(sel);
 const el = (tag, cls) => { const e = document.createElement(tag); if (cls) e.className = cls; return e; };
 
+/* Page numbers are reused across uploads/reseeds, so /pages/{n}/image can map to
+   different bytes over time. Append a content-derived version so a reused number gets
+   a fresh URL the browser hasn't cached (seeded pages keep a stable URL → CDN cache). */
+function imageUrl(docId, page) {
+  const v = [page.status, page.avg_confidence, page.low_conf_words, page.width, page.height]
+    .map((x) => (x == null ? "" : x)).join("_");
+  return `${API}/documents/${docId}/pages/${page.page_number}/image?v=${encodeURIComponent(v)}`;
+}
+
 async function api(path, opts) {
   const r = await fetch(API + path, opts);
   if (!r.ok) throw new Error((await r.text()) || r.status);
@@ -66,7 +75,7 @@ async function loadPage(n) {
 
   // scan
   const img = $("#scan-img");
-  img.src = `${API}/documents/${state.doc.id}/pages/${n}/image`;
+  img.src = imageUrl(state.doc.id, page);
   img.onerror = () => { img.style.display = "none"; $("#scan-empty").style.display = "block"; };
   img.onload = () => { img.style.display = "block"; $("#scan-empty").style.display = "none"; };
   $("#scan-name").textContent = `page ${n}`;
@@ -348,7 +357,7 @@ async function drawSegmentation(pageNumber) {
     // fires `load` and the overlay stays empty. Redraw on resize so boxes track the img.
     state._segRedraw = draw;
     img.onload = draw;
-    img.src = `${API}/documents/${state.doc.id}/pages/${pageNumber}/image`;
+    img.src = imageUrl(state.doc.id, page);
     if (img.complete && img.naturalWidth) draw();
   } catch (e) { console.error("drawSegmentation failed", e); }
 }
