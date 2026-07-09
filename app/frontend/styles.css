@@ -256,3 +256,78 @@ body {
   .view { flex-direction: column; }
   .scan-pane { width: 100%; flex: 0 0 42%; }
 }
+
+/* ===== Phones ===== (all rules scoped here so desktop is unchanged) */
+@media (max-width: 640px) {
+  /* Header: wrap to two rows, drop the long subtitle, keep brand + tabs usable */
+  .app-header {
+    height: auto; flex: 0 0 auto; flex-wrap: wrap;
+    padding: 8px 14px; gap: 4px 16px;
+  }
+  .divider, .doc-subtitle, .spacer { display: none; }
+  .brand-mark { width: 26px; height: 26px; font-size: 16px; }
+  .brand-name { font-size: 17px; }
+  .tabs { order: 2; width: 100%; gap: 22px; margin-right: 0; height: auto; }
+  .tab { height: auto; padding: 3px 0 6px; font-size: 13px; }
+
+  /* Split views (already stacked at 860): tighten the shared scan pane */
+  .scan-pane { flex: 0 0 42%; }
+  .scan-toolbar { height: 44px; flex-basis: 44px; padding: 0 12px; }
+  .scan-stage { padding: 14px; }
+  .scan-caption { padding: 9px 14px; }
+
+  /* Reader: scroll the whole view (scan on top, full transcription below) instead
+     of squeezing the transcription into a tiny fixed pane. Scoped to #view-reader so
+     Upload's live preview (which needs a fixed-height pane) is unaffected. */
+  #view-reader { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  #view-reader .scan-pane { flex: 0 0 auto; }
+  #view-reader .scan-stage { flex: 0 0 auto; height: 46vh; }
+  #view-reader .paper-pane { flex: 0 0 auto; box-shadow: none; }
+  #view-reader .transcription { flex: 0 0 auto; overflow: visible; max-width: none; }
+
+  /* Reader — transcription paper (wrap header so the toggle + % don't crowd/clip) */
+  .paper-header { padding: 14px 16px 10px; flex-wrap: wrap; gap: 8px 10px; }
+  .paper-title { font-size: 19px; }
+  .conf-pct { font-size: 21px; }
+  .header-right { width: 100%; gap: 10px; justify-content: space-between; align-items: center; }
+  .legend { padding: 10px 16px; gap: 8px 10px; flex-wrap: wrap; }
+  .legend-bar { width: 96px; }
+  .transcription { padding: 16px 16px 40px; font-size: 17px; line-height: 1.8; }
+
+  /* Ask the Archive — stack the input dock so buttons don't overflow */
+  .chat-wrap { padding: 0 14px; }
+  .thread { padding: 18px 0 14px; gap: 16px; }
+  .intro span { max-width: 100%; }
+  .bubble-q { max-width: 90%; font-size: 15px; }
+  .answer-body { font-size: 16px; }
+  .dock { flex-wrap: wrap; padding: 10px 12px; gap: 8px; border-radius: 12px; }
+  .dock input { flex: 1 1 100%; font-size: 16px; padding: 2px 4px; }
+  .cook-btn { flex: 1 1 auto; justify-content: center; }
+  .send-btn { flex: 0 0 auto; width: 44px; height: 40px; }
+  .disclaimer { font-size: 11px; }
+
+  /* Upload: scroll the whole view so the full pipeline is visible end-to-end
+     (dropzone → live preview + segmentation boxes → stepper → queue → footer).
+     Keep the preview a fixed height so the overlay boxes still render. Scoped to
+     #view-upload so it doesn't affect the Reader. */
+  #view-upload { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  #view-upload .scan-pane { flex: 0 0 auto; }
+  #view-upload .active-detail { flex: 0 0 auto; }
+  #view-upload .active-preview { flex: 0 0 auto; height: 40vh; }
+  #view-upload .paper-pane { flex: 0 0 auto; box-shadow: none; }
+  #view-upload .queue { flex: 0 0 auto; overflow: visible; }
+
+  /* Upload & Process */
+  .dropzone { margin: 12px; padding: 14px; gap: 12px; flex-wrap: wrap; }
+  .browse-btn { flex: 0 0 auto; }
+  .active-detail { padding: 0 14px 12px; }
+  .model-card { display: none; }             /* long model-meta overflows; drop on phone */
+  .stepper { padding: 12px 14px; }
+  .step { font-size: 0; gap: 0; }            /* hide labels; keep the numbered dots */
+  .step .step-dot { font-size: 12px; }
+  .step-line { margin: 0 6px; }
+  .queue { padding: 8px 12px 14px; }
+  .q-bar { max-width: none; }
+  .upload-footer { padding: 12px 14px; gap: 10px; flex-wrap: wrap; }
+  .upload-footer .primary-btn { flex: 0 0 auto; }
+}
