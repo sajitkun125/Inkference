@@ -40,7 +40,22 @@ SEED="$(mktemp -d)"
 cp "$DATA/inkference.db" "$SEED/"
 cp -r "$DATA/index" "$SEED/"
 echo "Uploading prebuilt corpus (DB + index) to dataset: $DATASET (seed_data/)"
-hf upload "$DATASET" "$SEED" seed_data --repo-type dataset
+# Use the Python API (upload_folder), NOT the `hf upload` CLI: the CLI calls the
+# repo-create endpoint, which now returns 402 for free-tier Docker Spaces. upload_folder
+# commits to the existing repo without that call.
+"$REPO/.venv/bin/python" - "$SEED" "$DATASET" <<'PY'
+import sys
+from huggingface_hub import HfApi
+api = HfApi()
+folder, repo = sys.argv[1], sys.argv[2]
+try:
+    api.create_repo(repo, repo_type="dataset", exist_ok=True)
+except Exception as e:
+    print(f"(create_repo note: {str(e)[:120]})")
+api.upload_folder(folder_path=folder, repo_id=repo, repo_type="dataset",
+                  path_in_repo="seed_data", commit_message="update prebuilt corpus")
+print("dataset upload ok")
+PY
 rm -rf "$SEED"
 
 # 2. Upload the app code + Dockerfile to the Space (NO large files here).
@@ -58,10 +73,25 @@ find "$STAGE/app" -type d -name "__pycache__" -prune -exec rm -rf {} + 2>/dev/nu
 find "$STAGE/app" -type d -name "*.egg-info"  -prune -exec rm -rf {} + 2>/dev/null || true
 
 echo "Uploading app to space: $SPACE"
-# --delete clears stale files from earlier deploys (Book-1 base64 images, old seed_data).
-hf upload "$SPACE" "$STAGE" . --repo-type space \
-  --exclude ".git/*" \
-  --delete "app/deploy/book1_data/*" --delete "app/deploy/seed_data/*"
+# Python API (upload_folder), NOT `hf upload`: the CLI's repo-create call returns 402 for
+# free-tier Docker Spaces. delete_patterns clears stale files (Book-1 base64 images, old
+# seed_data); a commit here auto-triggers the Space rebuild.
+"$REPO/.venv/bin/python" - "$STAGE" "$SPACE" <<'PY'
+import sys
+from huggingface_hub import HfApi
+api = HfApi()
+folder, repo = sys.argv[1], sys.argv[2]
+try:
+    api.create_repo(repo, repo_type="space", space_sdk="docker", exist_ok=True)
+except Exception as e:
+    # Expected 402 when the Space exists on free-tier Docker; upload_folder still works.
+    print(f"(create_repo skipped: {str(e)[:120]})")
+api.upload_folder(folder_path=folder, repo_id=repo, repo_type="space",
+                  ignore_patterns=[".git/*"],
+                  delete_patterns=["app/deploy/book1_data/*", "app/deploy/seed_data/*"],
+                  commit_message="deploy app")
+print("space upload ok")
+PY
 echo "Done. Ensure the Dockerfile's SEED_DATASET matches '$DATASET', set the Space"
 echo "variable INKFERENCE_IMAGES_BASE_URL + secrets, then watch Logs:"
 echo "  https://huggingface.co/spaces/$SPACE"
