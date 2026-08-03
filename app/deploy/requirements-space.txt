@@ -19,3 +19,16 @@ fastapi==0.138.2
 uvicorn[standard]==0.49.0
 python-multipart==0.0.32
 requests==2.34.2
+
+# Agent (LangGraph orchestration only — rag/llm.py stays the model layer).
+# Transitives pinned so a Space rebuild can't silently pull a new langchain-core.
+langgraph==1.2.10
+langgraph-checkpoint-sqlite==3.1.1
+langchain-core==1.5.3
+langchain-protocol==0.0.18
+langgraph-checkpoint==4.1.1
+langgraph-prebuilt==1.1.0
+langgraph-sdk==0.4.2
+langsmith==0.10.15
+# langgraph-sdk requires websockets<16; uvicorn[standard] needs >=10.4.
+websockets==15.0.1

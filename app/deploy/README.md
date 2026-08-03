@@ -120,5 +120,5 @@ python -m inkference.store.seed_book1 --alex ~/Downloads/AlexFiles   # or store.
 uvicorn inkference.api.main:app --port 8000 --log-level info
 ```
 
-See [../projectNotes/running_and_seeds.md](../projectNotes/running_and_seeds.md) for seeds/data-roots
-and [../projectNotes/inkference_platform_plan.md](../projectNotes/inkference_platform_plan.md) for the plan.
+See the [root README](../../README.md) for seeds/data-roots, the corpus rebuild, and the
+full deploy walkthrough.

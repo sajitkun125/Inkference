@@ -150,6 +150,21 @@ models/
 src/*.egg-info/
 *.egg-info/
 
+# Agent conversation memory. Holds users' questions verbatim and is per-machine —
+# never commit it, and note that deploy_all_books.sh copies only inkference.db +
+# index/ into the public seed dataset, so it can't ship there either.
+agent_checkpoints.db
+agent_checkpoints.db-shm
+agent_checkpoints.db-wal
+
+# SQLite sidecars (WAL mode) — transient, and they make the tracked .db look dirty.
+*.db-shm
+*.db-wal
+
+# Local dev server logs
+app/server*.log
+.pytest_cache/
 
 # Internal build/design notes — kept locally, not published with the repo.
 projectNotes/
+

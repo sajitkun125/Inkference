@@ -58,6 +58,12 @@ async function init() {
   $("#doc-subtitle").textContent = `${state.doc.title} · ${state.doc.subtitle || ""}`;
   $("#ask-banner").textContent =
     `Answers are drawn from all ${state.totalPages} transcribed pages of this document`;
+  // Hide the Deep research toggle when the backend has the agent switched off,
+  // so the control is never offered when it would 503.
+  try {
+    const health = await api("/health");
+    if (health && health.agent_enabled === false) $("#ask-modes").classList.add("hidden");
+  } catch (e) { /* health is advisory — leave the toggle as-is */ }
   await loadPage(1);
   if (location.hash) showView(location.hash.slice(1));
 }
@@ -156,37 +162,77 @@ $("#view-toggle").addEventListener("click", (e) => {
 });
 
 /* ---------- Ask the Archive ---------- */
+/* Two modes. Default = POST /ask: one retrieval, one LLM call, ~2s. "Deep research"
+   = POST /agent: a LangGraph loop that can search, then read pages in sequence, and
+   remembers the conversation. Slower, so it only runs when explicitly asked for. */
+const deepOn = () => $("#deep-research").checked;
+
+/* Thread id is per-document and per-tab: a new tab starts a new conversation, and
+   switching documents must not resurrect the wrong history. */
+function threadId() {
+  const key = "inkference.thread." + state.doc.id;
+  let id = sessionStorage.getItem(key);
+  if (!id) {
+    id = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()));
+    sessionStorage.setItem(key, id);
+  }
+  return id;
+}
+
+function renderSources(ans, pages) {
+  if (!pages || !pages.length) return;
+  const src = el("div", "sources");
+  src.innerHTML = '<span class="sources-cap">Sources</span>';
+  pages.forEach((p) => {
+    const chip = el("span", "chip-page"); chip.textContent = "Page " + p;
+    chip.addEventListener("click", () => { showView("reader"); loadPage(p); });
+    src.appendChild(chip);
+  });
+  ans.appendChild(src);
+}
+
+/* The step trace is what makes a 20s wait legible: it shows the agent searching and
+   reading rather than an idle spinner. */
+function renderTrace(ans, trace) {
+  if (!trace || !trace.length) return;
+  const strip = el("div", "trace");
+  trace.forEach((t) => {
+    const step = el("span", "trace-step");
+    step.textContent = t.label + (t.note ? ` (${t.note})` : "");
+    strip.appendChild(step);
+  });
+  ans.insertBefore(strip, ans.querySelector(".answer-body"));
+}
+
 async function ask(question, persona) {
   if (!question.trim() || !state.doc) return;
   const cook = persona === "cook";
+  const deep = deepOn();
   const thread = $("#thread");
   const q = el("div", "bubble-q"); q.textContent = question; thread.appendChild(q);
 
   const ans = el("div", "answer");
   const tag = cook ? '<span class="in-character">in character</span>' : "";
-  const loading = cook ? "Consulting the journal…" : "…thinking…";
+  const deepTag = deep ? '<span class="deep-tag">deep research</span>' : "";
+  const loading = deep ? "Researching the journal…" : (cook ? "Consulting the journal…" : "…thinking…");
   ans.innerHTML = `<div class="answer-head"><div class="answer-mark">I</div>
-    <span class="answer-who">${cook ? "Author" : "Inkference"}</span>${tag}</div>
+    <span class="answer-who">${cook ? "Author" : "Inkference"}</span>${tag}${deepTag}</div>
     <div class="answer-body">${loading}</div>`;
   thread.appendChild(ans);
   thread.scrollTop = thread.scrollHeight;
 
   try {
-    const res = await api(`/documents/${state.doc.id}/ask`, {
+    const body = deep
+      ? { question, persona: persona || null, thread_id: threadId() }
+      : { question, persona: persona || null };
+    const res = await api(`/documents/${state.doc.id}/${deep ? "agent" : "ask"}`, {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ question, persona: persona || null }),
+      body: JSON.stringify(body),
     });
     ans.querySelector(".answer-body").textContent = res.answer;
-    if (res.source_pages && res.source_pages.length) {
-      const src = el("div", "sources");
-      src.innerHTML = '<span class="sources-cap">Sources</span>';
-      res.source_pages.forEach((p) => {
-        const chip = el("span", "chip-page"); chip.textContent = "Page " + p;
-        chip.addEventListener("click", () => { showView("reader"); loadPage(p); });
-        src.appendChild(chip);
-      });
-      ans.appendChild(src);
-    }
+    renderTrace(ans, res.trace);
+    renderSources(ans, res.source_pages);
+    if (deep) $("#ask-reset").classList.remove("hidden");
   } catch (e) {
     ans.querySelector(".answer-body").textContent = "Error: " + e.message;
   }
@@ -197,6 +243,21 @@ $("#ask-send").addEventListener("click", () => submitAsk());
 $("#ask-cook").addEventListener("click", () => submitAsk("cook"));
 $("#ask-input").addEventListener("keydown", (e) => { if (e.key === "Enter") submitAsk(); });
 $("#suggestions").addEventListener("click", (e) => { if (e.target.dataset.q) ask(e.target.dataset.q); });
+
+$("#ask-reset").addEventListener("click", async () => {
+  if (!state.doc) return;
+  const key = "inkference.thread." + state.doc.id;
+  const id = sessionStorage.getItem(key);
+  if (id) {
+    try {
+      await api(`/documents/${state.doc.id}/agent/threads/${id}`, { method: "DELETE" });
+    } catch (e) { /* the thread may never have been persisted — clearing locally is enough */ }
+    sessionStorage.removeItem(key);
+  }
+  const thread = $("#thread");
+  [...thread.querySelectorAll(".bubble-q, .answer")].forEach((n) => n.remove());
+  $("#ask-reset").classList.add("hidden");
+});
 
 /* ---------- Upload & Process ---------- */
 const dz = $("#dropzone");

@@ -219,7 +219,64 @@ class CorrectionConfig:
     )
 
 
+@dataclass
+class AgentConfig:
+    """LangGraph research agent behind "Ask the Archive" (POST /documents/{id}/agent).
+
+    The agent is an ADDITION: POST /ask stays the one-shot fast path. Budgets exist
+    because a run costs 2-7 LLM calls against a free Groq tier on a free CPU Space.
+    """
+
+    enabled: bool = field(default_factory=lambda: _env_bool("AGENT_ENABLED", True))
+
+    # -- budgets ------------------------------------------------------------ #
+    # Tool calls (search/read/...) per question. Each costs a plan LLM call.
+    max_steps: int = field(default_factory=lambda: _env_int("AGENT_MAX_STEPS", 4))
+    max_rewrites: int = field(default_factory=lambda: _env_int("AGENT_MAX_REWRITES", 1))
+    max_verify_retries: int = field(
+        default_factory=lambda: _env_int("AGENT_MAX_VERIFY_RETRIES", 1)
+    )
+    # Wall-clock ceiling for one turn, checked in EVERY node so a slow provider
+    # can't run away. Below the per-call timeout * max_steps on purpose.
+    time_budget_s: float = field(
+        default_factory=lambda: _env_float("AGENT_TIME_BUDGET_S", 45.0)
+    )
+    # Per-LLM-call timeout for agent calls (rag/llm.py defaults to 60s for /ask).
+    llm_timeout_s: float = field(
+        default_factory=lambda: _env_float("AGENT_LLM_TIMEOUT_S", 30.0)
+    )
+
+    # -- retrieval / evidence ----------------------------------------------- #
+    search_k: int = field(default_factory=lambda: _env_int("AGENT_SEARCH_K", 6))
+    # Cosine floor applied in the TOOL layer only, so /ask keeps its current recall.
+    score_floor: float = field(
+        default_factory=lambda: _env_float("AGENT_SCORE_FLOOR", 0.25)
+    )
+    # Truncation caps that keep the prompt inside a free-tier token budget.
+    page_chars: int = field(default_factory=lambda: _env_int("AGENT_PAGE_CHARS", 1800))
+    evidence_chars: int = field(
+        default_factory=lambda: _env_int("AGENT_EVIDENCE_CHARS", 9000)
+    )
+    # read_range spans at most this many pages and never crosses a book boundary.
+    max_span: int = field(default_factory=lambda: _env_int("AGENT_MAX_SPAN", 6))
+
+    # -- conversation memory ------------------------------------------------ #
+    # Deliberately NOT inside inkference.db: deploy_all_books.sh copies that file
+    # into the PUBLIC HF seed dataset, and conversation history must never ship.
+    checkpoint_path: Path = field(
+        default_factory=lambda: Path(
+            os.getenv("AGENT_CHECKPOINT_PATH", str(DATA_ROOT / "agent_checkpoints.db"))
+        )
+    )
+    thread_ttl_days: int = field(
+        default_factory=lambda: _env_int("AGENT_THREAD_TTL_DAYS", 7)
+    )
+    # Prior turns replayed into the plan/compose prompts.
+    history_turns: int = field(default_factory=lambda: _env_int("AGENT_HISTORY_TURNS", 6))
+
+
 htr = HTRConfig()
 rag = RAGConfig()
 store = StoreConfig()
 correction = CorrectionConfig()
+agent = AgentConfig()

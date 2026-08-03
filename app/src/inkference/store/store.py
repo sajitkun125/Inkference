@@ -308,6 +308,21 @@ class DocumentStore:
             ).fetchone()
             return row["image_path"] if row and row["image_path"] else None
 
+    def page_image_keys(self, doc_id: int) -> list[tuple[int, str]]:
+        """(page_number, image_path) for every page — used to derive book boundaries.
+
+        get_document() deliberately omits image_path (it's internal), but the agent
+        needs it: seeded pages carry a relative key "book<N>/..." that is the only
+        surviving record of which of the six books a corpus page belongs to.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT page_number, image_path FROM pages "
+                "WHERE document_id=? ORDER BY page_number",
+                (doc_id,),
+            ).fetchall()
+            return [(r["page_number"], r["image_path"] or "") for r in rows]
+
     def iter_pages_text(
         self, doc_id: int, prefer_corrected: bool = True
     ) -> Iterator[tuple[int, str]]:
