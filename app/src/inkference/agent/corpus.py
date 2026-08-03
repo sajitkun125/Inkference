@@ -194,12 +194,15 @@ def read_range(
     if end < start:
         start, end = end, start
     span_end = min(end, start + cfg.max_span - 1)
+    capped_by_span = span_end < end
 
     book = book_for_page(doc_id, store, start)
+    capped_by_book = False
     if book is not None:
         _lo, hi = book_map(doc_id, store)[book]
         if span_end > hi:
             span_end = hi
+            capped_by_book = True
 
     passages: list[dict] = []
     missing: list[int] = []
@@ -210,9 +213,15 @@ def read_range(
         else:
             missing.append(page)
 
+    # Notes say WHY the range was shortened, never which pages were read — the label
+    # already carries those, so repeating them is noise in the UI trace and wasted
+    # tokens for the planner. Book boundary is reported ahead of the span cap because
+    # it is the more informative reason when both apply.
     notes = []
-    if span_end < end:
-        notes.append(f"range clamped to pages {start}-{span_end}")
+    if capped_by_book:
+        notes.append(f"stopped at the end of Book {book}")
+    elif capped_by_span:
+        notes.append(f"clamped to {cfg.max_span} pages per read")
     if missing:
         notes.append(f"no text on page(s) {missing}")
     return {

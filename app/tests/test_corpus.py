@@ -42,13 +42,26 @@ def test_read_range_clamps_to_max_span(store, agent_cfg):
     # max_span=2 in the fixture config, so 1..3 must become 1..2.
     out = corpus.read_range(store.doc_id, store, 1, 3, agent_cfg)
     assert out["pages"] == [1, 2]
-    assert "clamped" in out["note"]
+    assert "clamped to 2 pages" in out["note"]
 
 
 def test_read_range_does_not_cross_a_book_boundary(store, agent_cfg):
     # Book 1 ends at page 3; a request for 3..4 must stop at 3.
     out = corpus.read_range(store.doc_id, store, 3, 4, agent_cfg)
     assert out["pages"] == [3]
+    # The book boundary is the real reason here, not the span cap.
+    assert out["note"] == "stopped at the end of Book 1"
+
+
+def test_read_range_note_never_repeats_the_pages_in_the_label(store, agent_cfg):
+    """The UI renders label + note together; a note echoing the label reads as a bug."""
+    out = corpus.read_range(store.doc_id, store, 1, 3, agent_cfg)
+    assert out["label"] == "Reading pages 1–2"
+    assert "1–2" not in out["note"] and "1-2" not in out["note"]
+
+
+def test_read_range_within_bounds_has_no_note(store, agent_cfg):
+    assert corpus.read_range(store.doc_id, store, 1, 2, agent_cfg)["note"] == ""
 
 
 def test_read_range_normalises_reversed_bounds(store, agent_cfg):

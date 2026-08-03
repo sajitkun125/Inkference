@@ -32,6 +32,7 @@ the page average plus how many words fell below 60%.
 ### Ask the Archive
 
 A grounded answer with clickable source-page chips — each one jumps the Reader to that page.
+This is the **fast path**: one retrieval, one LLM call, ~2 s.
 
 ![Ask the Archive — a grounded answer with source-page citations](images/app/ask.png)
 
@@ -67,6 +68,18 @@ the fast path structurally cannot do:
 - **Follow-ups.** `/ask` is stateless, so *"and what was the weather like there?"* has no
   referent. The agent keeps per-thread conversation memory and rewrites the question to
   stand on its own before retrieving.
+
+Toggle **Deep research** in the Ask view. Each answer shows the agent's step trace — what
+it searched and which pages it read — so a longer wait reads as work rather than a stall:
+
+![Deep research — the agent's step trace, contiguous page sources, and a follow-up resolved from conversation memory](images/app/ask-agent.png)
+
+Note what the two turns show. The first question is narrative, so the agent searches to
+locate Plymouth and then **reads pages 14–22 in order**, producing a dated account of the
+Resolution's arrival — its sources are a contiguous run, not five scattered chunks. The
+second turn is just *"And what was the weather like there?"*: the agent resolves **"there"**
+to Plymouth from conversation memory, searches again, and then reports honestly that the
+journal records no weather for those days rather than inventing one.
 
 ```
 prepare → plan ─┬─(tool)→ act ─┬─(budget left)→ plan
@@ -112,9 +125,9 @@ Conversation memory is a LangGraph SQLite checkpointer at
 which the deploy script copies into the *public* HF seed dataset. On the free Space `/data`
 is ephemeral, so memory lasts until the Space sleeps.
 
-> The screenshots above are from the deployed Space, which currently runs the fast path
-> only. Deep research is available when you run locally, and on the Space after the next
-> deploy.
+> The Reader, Ask and Upload screenshots are from the deployed Space, which currently runs
+> the fast path only; the Deep research screenshot is from a local run. The agent ships to
+> the Space on the next deploy.
 
 ## Repository layout
 
