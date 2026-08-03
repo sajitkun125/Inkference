@@ -144,3 +144,6 @@ models/bentham_trocr_checkpoint/
 #Large and not necessary notebooks
 visualizeFinalTranscriptionLinesAndGT.ipynb
 
+
+# Internal build/design notes — kept locally, not published with the repo.
+projectNotes/
