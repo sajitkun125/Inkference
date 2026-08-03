@@ -150,3 +150,6 @@ models/
 src/*.egg-info/
 *.egg-info/
 
+
+# Internal build/design notes — kept locally, not published with the repo.
+projectNotes/
