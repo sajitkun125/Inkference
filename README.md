@@ -97,7 +97,7 @@ Two design decisions worth knowing:
    chain keeps working inside the agent.
 2. **Tools are called via a JSON text protocol, not provider-native tool calling.** The
    fallback chain switches provider *per call*, and a native tool transcript is a
-   provider-specific object graph (OpenAI `tool_calls` vs Gemini `functionCall` vs Anthropic
+   provider-specific object graph (OpenAI `tool_calls` vs Gemini `functionCall` vs Anthropic(claude)
    `tool_use`). With a text protocol the transcript is just a string, so any provider can
    resume the run at any step. `agent/protocol.py` carries the tolerant parser this requires.
 
