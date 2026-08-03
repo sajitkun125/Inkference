@@ -1,6 +1,6 @@
 """Inkference FastAPI app.
 
-Endpoints (see projectNotes/inkference_platform_plan.md):
+Endpoints:
   GET  /api/health
   GET  /api/documents
   POST /api/documents
@@ -8,7 +8,9 @@ Endpoints (see projectNotes/inkference_platform_plan.md):
   POST /api/documents/{id}/pages         upload scans -> background ingest job
   GET  /api/documents/{id}/pages/{n}     transcription (lines + words + confidence)
   GET  /api/documents/{id}/pages/{n}/image
-  POST /api/documents/{id}/ask           RAG answer + source pages
+  POST /api/documents/{id}/ask           RAG answer + source pages (fast path)
+  POST /api/documents/{id}/agent         LangGraph research agent (multi-step + memory)
+  DEL  /api/documents/{id}/agent/threads/{thread_id}   forget one conversation
   GET  /api/jobs/{id}                    ingestion progress
 """
 from __future__ import annotations
