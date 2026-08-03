@@ -35,3 +35,24 @@ fastapi==0.138.2
 uvicorn[standard]==0.49.0
 python-multipart==0.0.32
 pydantic==2.13.4
+
+# --- Inkference platform: agent (Phase 6, LangGraph orchestration) ---
+# LangGraph is used for ORCHESTRATION ONLY — rag/llm.py stays the single model
+# layer (raw requests, multi-provider fallback). No langchain chat models.
+langgraph==1.2.10
+langgraph-checkpoint-sqlite==3.1.1
+# Transitives pinned too: langgraph allows langchain-core<2, a range that already
+# spans 1.0->1.5 in months, and the HF Space rebuilds from requirements at deploy
+# time — unpinned means the Space and a laptop can install different libraries
+# from the same commit.
+langchain-core==1.5.3
+langchain-protocol==0.0.18
+langgraph-checkpoint==4.1.1
+langgraph-prebuilt==1.1.0
+langgraph-sdk==0.4.2
+langsmith==0.10.15
+# langgraph-sdk requires websockets<16; uvicorn[standard] is happy with >=10.4.
+websockets==15.0.1
+
+# --- dev/test (not installed on the Space) ---
+pytest==8.4.2

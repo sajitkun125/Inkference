@@ -43,6 +43,15 @@ ENV INKFERENCE_DATA_ROOT=/data \
     LLM_MODEL=openai/gpt-oss-120b \
     LLM_FALLBACK=gemini:gemini-2.5-flash-lite \
     RAG_USE_CORRECTED=true \
+    # Deep research agent (LangGraph). Budgets are tuned for free CPU + free Groq:
+    # a run is 2-7 LLM calls, so caps keep one question from eating the rate limit.
+    AGENT_ENABLED=true \
+    AGENT_MAX_STEPS=4 \
+    AGENT_TIME_BUDGET_S=45 \
+    # langsmith ships as a hard dep of langchain-core and will otherwise attempt
+    # outbound telemetry on every run — off.
+    LANGSMITH_TRACING=false \
+    LANGCHAIN_TRACING_V2=false \
     # dataset holding the prebuilt corpus (seed_data/) AND the scans (book*/forster*/)
     SEED_DATASET=sajitkun125/inkference-book-images
 # REQUIRED Space secrets: GROQ_API_KEY, GEMINI_API_KEY

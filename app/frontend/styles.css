@@ -193,6 +193,34 @@ body {
   border-radius: 999px; padding: 2px 9px;
 }
 
+/* ----- Deep research (LangGraph agent) ----- */
+.ask-modes { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; }
+.mode-toggle {
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  font-size: 12.5px; color: #6f5d49; user-select: none;
+}
+.mode-toggle input { accent-color: var(--accent); cursor: pointer; }
+.link-btn {
+  background: none; border: none; cursor: pointer; padding: 0;
+  font-family: var(--sans); font-size: 12.5px; color: var(--muted);
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.link-btn:hover { color: var(--accent); }
+.deep-tag {
+  font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; color: #6f5d49;
+  background: rgba(111,93,73,.08); border: 1px solid rgba(111,93,73,.2);
+  border-radius: 999px; padding: 2px 9px;
+}
+/* The agent's step trace: what it searched and which pages it read. Shown above the
+   answer so a 10-20s wait reads as work rather than a stall. */
+.trace { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.trace-step {
+  font-size: 12px; color: #7d6c56; padding-left: 16px; position: relative; line-height: 1.5;
+}
+.trace-step::before {
+  content: "→"; position: absolute; left: 0; color: var(--muted-2);
+}
+
 /* ===== Upload & Process ===== */
 .dropzone {
   margin: 20px; border: 1.5px dashed rgba(220,200,160,.32); border-radius: 12px;

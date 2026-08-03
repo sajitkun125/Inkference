@@ -5,7 +5,6 @@ frontend renders both the fast path and the agent with the same code.
 """
 from __future__ import annotations
 
-import operator
 from dataclasses import dataclass, field
 from typing import Annotated, Any, TypedDict
 
@@ -13,12 +12,18 @@ from typing import Annotated, Any, TypedDict
 # --------------------------------------------------------------------------- #
 # reducers
 # --------------------------------------------------------------------------- #
-def merge_evidence(left: list[dict], right: list[dict]) -> list[dict]:
+def merge_evidence(left: list[dict], right: list[dict] | None) -> list[dict]:
     """Accumulate retrieved passages across steps, deduped by (page_number, text).
 
     The same page legitimately arrives twice — once from a search hit, once from a
     read_page — and we keep the higher score so the compose ordering stays sane.
+
+    `right is None` RESETS. The checkpointer persists state across turns of a
+    conversation, so without a reset the second question would inherit (and cite)
+    the first question's evidence. `prepare` sends None at the start of every turn.
     """
+    if right is None:
+        return []
     if not right:
         return left
     merged: dict[tuple[int, str], dict] = {}
@@ -31,8 +36,18 @@ def merge_evidence(left: list[dict], right: list[dict]) -> list[dict]:
 
 
 def append_turns(left: list[dict], right: list[dict]) -> list[dict]:
-    """Conversation history. Plain append — the checkpointer persists it per thread."""
+    """Conversation history. Plain append — the checkpointer persists it per thread.
+
+    Deliberately has no reset: this is the memory the agent exists to provide.
+    """
     return [*(left or []), *(right or [])]
+
+
+def extend_trace(left: list[dict], right: list[dict] | None) -> list[dict]:
+    """Per-step audit trail. Resets per turn on None, like merge_evidence."""
+    if right is None:
+        return []
+    return [*(left or []), *right]
 
 
 # --------------------------------------------------------------------------- #
@@ -49,7 +64,7 @@ class AgentState(TypedDict, total=False):
     standalone_question: str      # coreference-resolved; what actually gets embedded
     history: Annotated[list[dict], append_turns]   # [{role, content}], survives via checkpointer
     evidence: Annotated[list[dict], merge_evidence]  # [{page_number, text, score, via}]
-    trace: Annotated[list[dict], operator.add]     # per-step audit, streamed to the UI
+    trace: Annotated[list[dict], extend_trace]      # per-step audit, shown in the UI
     books: dict[str, Any]         # book map: {"1": [1, 132], ...}
 
     # -- control

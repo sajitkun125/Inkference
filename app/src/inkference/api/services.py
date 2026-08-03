@@ -58,6 +58,16 @@ def get_pipeline() -> HTRPipeline:
     return _pipeline
 
 
+def run_agent(doc_id: int, question: str, **kwargs):
+    """One turn of the LangGraph research agent (POST /documents/{id}/agent).
+
+    Imported lazily: langgraph is only needed by this endpoint, so the seeders and
+    HTR scripts keep booting without it."""
+    from ..agent.runner import run_agent as _run
+
+    return _run(doc_id, question, get_store(), get_index(), **kwargs)
+
+
 def submit_ingest(doc_id: int, page_specs: list[tuple[int, int, str]], job_id: int) -> None:
     """page_specs = [(page_id, page_number, image_path), ...]"""
     _executor.submit(_run_ingest, doc_id, page_specs, job_id)

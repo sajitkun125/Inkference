@@ -9,6 +9,7 @@ sentence-transformers / faiss imports are lazy.
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterable
@@ -72,6 +73,13 @@ class RagIndex:
         self._doc_id: int | None = None
         self._index = None
         self._chunks: list[Chunk] = []
+        # _doc_id/_index/_chunks are a THREE-FIELD INVARIANT swapped non-atomically
+        # by _ensure_loaded. This object is a process-wide singleton shared by the
+        # request threadpool and the ingest worker, so without a lock a query can
+        # read _chunks after another thread has already replaced _index — returning
+        # text from the wrong document with no error. Reentrant because query() and
+        # add_pages() both call _ensure_loaded while holding it.
+        self._lock = threading.RLock()
 
     # -- embedder ----------------------------------------------------------- #
     def _ensure_embedder(self):
@@ -99,6 +107,10 @@ class RagIndex:
         """Build (or rebuild) the index for a document from (page_no, text) pairs."""
         import faiss
 
+        with self._lock:
+            return self._build_locked(doc_id, pages, faiss)
+
+    def _build_locked(self, doc_id: int, pages: Iterable[tuple[int, str]], faiss) -> int:
         chunks: list[Chunk] = []
         for page_number, text in pages:
             chunks.extend(chunk_page(page_number, text))
@@ -128,22 +140,23 @@ class RagIndex:
         ~1s per 30 chunks). Appending just the new pages keeps ingestion fast regardless
         of corpus size. Falls back to a full build if no index exists yet.
         """
-        if not page_numbers or not self._ensure_loaded(doc_id) or self._index is None:
-            return self.build_from_store(doc_id, store)
-        wanted = set(page_numbers)
-        new_chunks: list[Chunk] = []
-        for page_number, text in store.iter_pages_text(
-            doc_id, prefer_corrected=self.cfg.use_corrected_text
-        ):
-            if page_number in wanted:
-                new_chunks.extend(chunk_page(page_number, text))
-        if not new_chunks:
+        with self._lock:
+            if not page_numbers or not self._ensure_loaded(doc_id) or self._index is None:
+                return self.build_from_store(doc_id, store)
+            wanted = set(page_numbers)
+            new_chunks: list[Chunk] = []
+            for page_number, text in store.iter_pages_text(
+                doc_id, prefer_corrected=self.cfg.use_corrected_text
+            ):
+                if page_number in wanted:
+                    new_chunks.extend(chunk_page(page_number, text))
+            if not new_chunks:
+                return len(self._chunks)
+            vectors = self._embed([c.text for c in new_chunks])
+            self._index.add(vectors)
+            self._chunks.extend(new_chunks)
+            self._persist(doc_id)
             return len(self._chunks)
-        vectors = self._embed([c.text for c in new_chunks])
-        self._index.add(vectors)
-        self._chunks.extend(new_chunks)
-        self._persist(doc_id)
-        return len(self._chunks)
 
     def _persist(self, doc_id: int) -> None:
         import faiss
@@ -172,18 +185,21 @@ class RagIndex:
 
     def query(self, doc_id: int, question: str, top_k: int | None = None) -> list[Retrieved]:
         k = top_k or self.cfg.top_k
-        if not self._ensure_loaded(doc_id) or self._index is None:
-            return []
-        qv = self._embed([question])
-        k = min(k, len(self._chunks))
-        scores, idxs = self._index.search(qv, k)
-        out: list[Retrieved] = []
-        for score, i in zip(scores[0], idxs[0]):
-            if i < 0:
-                continue
-            c = self._chunks[int(i)]
-            out.append(Retrieved(page_number=c.page_number, text=c.text, score=float(score)))
-        return out
+        # Held across the search so _index and _chunks stay a matched pair: the agent
+        # issues several queries per request while ingest may be swapping documents.
+        with self._lock:
+            if not self._ensure_loaded(doc_id) or self._index is None:
+                return []
+            qv = self._embed([question])
+            k = min(k, len(self._chunks))
+            scores, idxs = self._index.search(qv, k)
+            out: list[Retrieved] = []
+            for score, i in zip(scores[0], idxs[0]):
+                if i < 0:
+                    continue
+                c = self._chunks[int(i)]
+                out.append(Retrieved(page_number=c.page_number, text=c.text, score=float(score)))
+            return out
 
     def exists(self, doc_id: int) -> bool:
         idx_path, meta_path = self._paths(doc_id)

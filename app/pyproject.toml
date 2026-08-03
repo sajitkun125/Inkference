@@ -24,7 +24,14 @@ dependencies = [
 htr = ["kraken", "doclayout-yolo"]
 rag = ["sentence-transformers", "faiss-cpu"]
 api = ["fastapi", "uvicorn[standard]", "python-multipart"]
+agent = ["langgraph", "langgraph-checkpoint-sqlite"]
 eval = ["jiwer", "evaluate"]
+
+[tool.pytest.ini_options]
+# Offline unit tests only — no model loads, no provider calls. Run from app/:
+#   ../.venv/bin/python -m pytest tests -q
+testpaths = ["tests"]
+pythonpath = ["src"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

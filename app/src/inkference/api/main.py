@@ -29,6 +29,7 @@ from ..config import (
     FRONTEND_DIR,
     IMAGES_BASE_URL,
     IMAGES_ROOT,
+    agent as agent_cfg,
     correction as correction_cfg,
     htr as htr_cfg,
     rag as rag_cfg,
@@ -89,6 +90,14 @@ class AskRequest(BaseModel):
     persona: str | None = None  # "cook" -> answer in character as Captain Cook
 
 
+class AgentAskRequest(BaseModel):
+    question: str
+    # Conversation id, minted by the client. Omit for a one-off (unremembered) turn.
+    thread_id: str | None = None
+    persona: str | None = None
+    max_steps: int | None = None
+
+
 def _slugify(text: str) -> str:
     text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "document"
@@ -105,7 +114,9 @@ def health() -> dict:
             "correction_enabled": correction_cfg.enabled,
             "correction_backend": correction_cfg.backend,
             "correction_model": (correction_cfg.api_model if correction_cfg.backend == "api"
-                                 else correction_cfg.model_id)}
+                                 else correction_cfg.model_id),
+            "agent_enabled": agent_cfg.enabled,
+            "agent_max_steps": agent_cfg.max_steps}
 
 
 @app.get("/api/documents")
@@ -216,6 +227,36 @@ def ask(doc_id: int, body: AskRequest) -> dict:
     ans = answer_question(doc_id, body.question, index, top_k=body.top_k, persona=body.persona)
     logger.info("ask doc=%s -> sources=%s", doc_id, ans.source_pages)
     return ans.to_dict()
+
+
+# --------------------------------------------------------------------------- #
+# ask the archive (LangGraph agent)
+# --------------------------------------------------------------------------- #
+# /ask above stays the fast path (~1 LLM call). The agent adds a tool-using loop
+# for the questions /ask cannot serve: narrative "what happened next" questions
+# that need pages read in order, and follow-ups that need conversation memory.
+@app.post("/api/documents/{doc_id}/agent")
+def ask_agent(doc_id: int, body: AgentAskRequest) -> dict:
+    if not agent_cfg.enabled:
+        raise HTTPException(503, "agent is disabled (AGENT_ENABLED=false)")
+    if not services.get_store().get_document(doc_id):
+        raise HTTPException(404, "document not found")
+    ans = services.run_agent(
+        doc_id, body.question,
+        thread_id=body.thread_id, persona=body.persona, max_steps=body.max_steps,
+    )
+    return ans.to_dict()
+
+
+@app.delete("/api/documents/{doc_id}/agent/threads/{thread_id}")
+def delete_agent_thread(doc_id: int, thread_id: str) -> dict:
+    """Forget one conversation ("New conversation" in the UI).
+
+    Doc-scoped because runner.run_agent namespaces thread ids as "{doc_id}:{id}".
+    """
+    from ..agent.checkpoint import delete_thread
+
+    return {"deleted": delete_thread(f"{doc_id}:{thread_id}"), "thread_id": thread_id}
 
 
 # --------------------------------------------------------------------------- #
