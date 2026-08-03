@@ -24,7 +24,6 @@ logger = logging.getLogger("inkference.agent")
 _graph = None
 _graph_lock = threading.Lock()
 
-
 def build_graph(store, index, checkpointer=None):
     """Compile the graph.
 
@@ -51,7 +50,6 @@ def build_graph(store, index, checkpointer=None):
     builder.add_edge("compose", END)
 
     return builder.compile(checkpointer=checkpointer or get_checkpointer())
-
 
 def get_graph(store, index):
     """Lazy singleton — compiling is cheap but the checkpointer connection is not."""
