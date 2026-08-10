@@ -7,6 +7,14 @@ torch==2.10.0
 torchvision==0.25.0
 kraken==7.0.2
 transformers==5.10.2
+# Pinned transitive: tqdm 4.70.0 rewrote _executor_map to compute the bar total via
+# min() over the iterables' length hints. huggingface_hub 1.16.1 (what transformers
+# resolves to here) passes snapshot_download a lazy filter object with no length hint,
+# so that min() gets an empty sequence and raises -- killing the Dockerfile's seed_data
+# download at build time. 4.67.1 uses length_hint(iterables[0]), which yields 0 instead.
+# Pinning tqdm rather than huggingface_hub is deliberate: hub versions new enough to
+# avoid this require click>=8.4.2, which conflicts with kraken 7.0.2's click<8.3.
+tqdm==4.67.1
 accelerate==1.13.0
 sentencepiece==0.2.1
 protobuf==7.35.0
