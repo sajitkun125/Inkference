@@ -225,64 +225,6 @@ Drop `--with-correction` for the raw-only corpus (slug `all-books-without-post-c
 Any live-uploaded pages in that data root are discarded by the rebuild (they only ever lived
 in the DB). After rebuilding, redeploy to push the new DB + index.
 
-## Deploy to a Hugging Face Space (full corpus, all 6 books)
-
-Everything large lives in a **public HF dataset** (HF's Docker build ships Git-LFS as
-pointers, so large/binary files can't go in the Space repo). The image pulls them at build
-with `snapshot_download`:
-
-- **scans (1.3 GB)** → streamed from the dataset CDN (not baked)
-- **prebuilt DB + FAISS index (~40 MB)** → downloaded at build → instant boot, no re-seed
-
-**1. Upload the scans once (public dataset):**
-
-```bash
-hf auth whoami                                          # ensure logged in (else: hf auth login)
-hf repo create inkference-book-images --repo-type dataset
-hf upload sajitkun125/inkference-book-images ~/Downloads/AlexFiles . \
-  --repo-type dataset --include "book*/forster*/*.jpg"
-```
-
-**2. Deploy** — uploads the prebuilt DB + index to the dataset (`seed_data/`) and the app
-code to the Space:
-
-```bash
-bash app/deploy/deploy_all_books.sh sajitkun125/inkference-app
-```
-
-Step by step, this:
-
-1. **Checkpoints the SQLite WAL** into `inkference.db` so the uploaded DB is self-contained.
-2. **Uploads DB + FAISS index** to the dataset under `seed_data/` (the ~923-page corpus).
-3. **Uploads the app code** (Dockerfile, `src/`, `frontend/`, requirements) to the Space,
-   `--delete`-ing stale files. This push triggers an automatic Space rebuild, during which
-   the image `snapshot_download`s the fresh `seed_data/` and copies it into `/data` on boot.
-
-The script **aborts before uploading** if the DB contains any live-uploaded pages (rows with
-an absolute `image_path`). Uploaded pages save a machine-local path (`/data/assets/…`) that
-doesn't exist on the Space, so shipping them would render broken scans — rebuild the seed
-cleanly (above, server stopped) if you hit this.
-
-**3. On the Space → Settings → Variables and secrets** (only needed once; these persist):
-
-- Variable `INKFERENCE_IMAGES_BASE_URL` =
-  `https://huggingface.co/datasets/sajitkun125/inkference-book-images/resolve/main`
-- Secrets `GROQ_API_KEY`, `GEMINI_API_KEY`
-
-**4. Factory reboot the Space** (Settings → "Factory reboot"). **Required to serve a fresh
-corpus and drop pages uploaded on the Space.** `/data` is ephemeral but the boot copy uses
-`cp -rn` (no-clobber), so it won't overwrite an existing `/data/inkference.db`. A Factory
-reboot wipes `/data` and bypasses the cached build layer, so the container starts empty and
-loads *only* the fresh 923-page seed. (A plain restart keeps whatever is already in `/data`.)
-
-The Dockerfile's `SEED_DATASET` must match your dataset (default
-`sajitkun125/inkference-book-images`).
-
-**Alternative: Book-1-only demo** (self-contained, base64 images):
-
-```bash
-bash app/deploy/deploy_to_hf.sh sajitkun125/inkference-app
-```
 
 ## Research notebooks
 
