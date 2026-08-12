@@ -13,13 +13,30 @@ indexed so you can read it side-by-side with the scan or just *ask the archive* 
 
 *Free-tier CPU Space — it sleeps when idle, so the first load can take a minute to wake.*
 
-## The three views
+## The views
 
 | View | What it does |
 |---|---|
+| **Sign in** | Create an account or sign in. Real accounts: scrypt-hashed passwords, server-side sessions, an HttpOnly cookie. Gates every `/api` route except `/api/health`, `/api/stats`, and `/api/auth/*`. |
+| **Library** | Home. Every document as a cover card (page 1 doubles as the cover) with page count and average confidence, a **Continue reading** card, and an **Add a book** tile into Upload. |
 | **Reader** | Scan next to its transcription; per-word **confidence tinting**, page-average %, and a Raw ⟷ Corrected toggle (green = LLM edits). Page navigation is cyclic. |
 | **Ask the Archive** | Ask a natural-language question; get a grounded answer with **source-page citations**, or an in-character **"Answer as Author"** (Forster) response. |
 | **Upload** | Drop new scans → live pipeline (**Segmentation → Recognition → Confidence → Correction**) with line-box overlays and a progress stepper. |
+
+### Accounts
+
+Accounts live in their own SQLite file (`INKFERENCE_AUTH_DB`, default `auth.db` beside
+the corpus) — deliberately **not** in `inkference.db`, which `deploy_all_books.sh`
+uploads to a public HF dataset. Passwords are never stored, only a salted scrypt hash;
+session cookies are stored as a SHA-256 digest, so a copy of `auth.db` yields neither a
+usable password nor a usable session.
+
+Set `INKFERENCE_AUTH_REQUIRED=false` to leave the API open — the sign-in page and
+accounts still work, nothing is gated. That is the right setting for a public demo
+Space, where a gate would lock every visitor out.
+
+The Google / Apple / Microsoft / SSO buttons are rendered **disabled**: OAuth needs
+provider credentials this deployment doesn't have. Email and password is the working path.
 
 ### Reader
 

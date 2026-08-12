@@ -1,7 +1,15 @@
 """Inkference FastAPI app.
 
+Every /api route below except /api/health and /api/auth/* requires a signed-in
+session (see require_user). Set INKFERENCE_AUTH_REQUIRED=false to open the API up
+for a public demo without removing accounts.
+
 Endpoints:
   GET  /api/health
+  POST /api/auth/signup                  create an account -> session cookie
+  POST /api/auth/login                   session cookie
+  POST /api/auth/logout                  clear the session
+  GET  /api/auth/me                      current user (null when signed out)
   GET  /api/documents
   POST /api/documents
   GET  /api/documents/{id}
@@ -21,17 +29,19 @@ import re
 import unicodedata
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Cookie, Depends, FastAPI, File, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from ..auth import EmailTaken
 from ..config import (
     FRONTEND_DIR,
     IMAGES_BASE_URL,
     IMAGES_ROOT,
     agent as agent_cfg,
+    auth as auth_cfg,
     correction as correction_cfg,
     htr as htr_cfg,
     rag as rag_cfg,
@@ -106,6 +116,103 @@ def _slugify(text: str) -> str:
 
 
 # --------------------------------------------------------------------------- #
+# accounts + sessions
+# --------------------------------------------------------------------------- #
+class SignupRequest(BaseModel):
+    email: str
+    password: str
+    name: str | None = None
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def current_user(session: str | None = Cookie(default=None, alias=auth_cfg.cookie_name)):
+    """Resolve the session cookie to a user, or None. Never raises — routes that
+    must have a user depend on require_user instead."""
+    return services.get_auth_store().get_session_user(session)
+
+
+def require_user(user=Depends(current_user)):
+    """Gate a route behind a signed-in account.
+
+    With INKFERENCE_AUTH_REQUIRED=false this waves everything through, so a public
+    demo Space can stay open without removing the accounts system.
+    """
+    if not auth_cfg.required:
+        return user
+    if user is None:
+        raise HTTPException(401, "sign in to continue")
+    return user
+
+
+def _set_session_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        auth_cfg.cookie_name,
+        token,
+        max_age=auth_cfg.session_ttl_days * 24 * 3600,
+        httponly=True,          # keeps the token away from any XSS on the page
+        samesite="lax",
+        secure=auth_cfg.cookie_secure,
+        path="/",
+    )
+
+
+@app.post("/api/auth/signup")
+def signup(body: SignupRequest, response: Response) -> dict:
+    email = (body.email or "").strip()
+    if not _EMAIL_RE.match(email):
+        raise HTTPException(422, "enter a valid email address")
+    if len(body.password or "") < auth_cfg.min_password_length:
+        raise HTTPException(
+            422, f"password must be at least {auth_cfg.min_password_length} characters"
+        )
+    store = services.get_auth_store()
+    try:
+        user = store.create_user(email, body.password, name=body.name)
+    except EmailTaken:
+        # Deliberately explicit: signup cannot hide that an address is taken, since
+        # the account simply cannot be created twice.
+        raise HTTPException(409, "an account with that email already exists")
+    _set_session_cookie(response, store.create_session(user["id"]))
+    logger.info("account created id=%s", user["id"])
+    return {"user": user}
+
+
+@app.post("/api/auth/login")
+def login(body: LoginRequest, response: Response) -> dict:
+    store = services.get_auth_store()
+    user = store.authenticate(body.email, body.password)
+    if user is None:
+        # One message for both "no such account" and "wrong password" so the
+        # response cannot be used to enumerate registered addresses.
+        raise HTTPException(401, "email or password is incorrect")
+    _set_session_cookie(response, store.create_session(user["id"]))
+    return {"user": user}
+
+
+@app.post("/api/auth/logout")
+def logout(
+    response: Response,
+    session: str | None = Cookie(default=None, alias=auth_cfg.cookie_name),
+) -> dict:
+    services.get_auth_store().delete_session(session)
+    response.delete_cookie(auth_cfg.cookie_name, path="/")
+    return {"ok": True}
+
+
+@app.get("/api/auth/me")
+def me(user=Depends(current_user)) -> dict:
+    """Who am I? Drives the frontend gate, so it stays 200 when signed out."""
+    return {"user": user, "auth_required": auth_cfg.required}
+
+
+# --------------------------------------------------------------------------- #
 # documents
 # --------------------------------------------------------------------------- #
 @app.get("/api/health")
@@ -118,15 +225,36 @@ def health() -> dict:
             "correction_model": (correction_cfg.api_model if correction_cfg.backend == "api"
                                  else correction_cfg.model_id),
             "agent_enabled": agent_cfg.enabled,
-            "agent_max_steps": agent_cfg.max_steps}
+            "agent_max_steps": agent_cfg.max_steps,
+            "auth_required": auth_cfg.required}
 
 
-@app.get("/api/documents")
+@app.get("/api/stats")
+def corpus_stats() -> dict:
+    """Corpus totals for the signed-out sign-in panel.
+
+    Public on purpose — it is the only thing that page can show before a session
+    exists, and it exposes counts only, never page text. Titles stay behind the gate.
+    """
+    docs = services.get_store().list_documents()
+    pages = sum(d.get("page_count") or 0 for d in docs)
+    scored = [(d.get("avg_confidence"), d.get("page_count") or 0) for d in docs
+              if d.get("avg_confidence") is not None]
+    weighted = sum(c * n for c, n in scored)
+    total_scored = sum(n for _, n in scored)
+    return {
+        "documents": len(docs),
+        "pages": pages,
+        "avg_confidence": (weighted / total_scored) if total_scored else None,
+    }
+
+
+@app.get("/api/documents", dependencies=[Depends(require_user)])
 def list_documents() -> list[dict]:
     return services.get_store().list_documents()
 
 
-@app.post("/api/documents")
+@app.post("/api/documents", dependencies=[Depends(require_user)])
 def create_document(body: CreateDocument) -> dict:
     store = services.get_store()
     slug = body.slug or _slugify(body.title)
@@ -136,7 +264,7 @@ def create_document(body: CreateDocument) -> dict:
     return {"id": doc_id, "slug": slug}
 
 
-@app.get("/api/documents/{doc_id}")
+@app.get("/api/documents/{doc_id}", dependencies=[Depends(require_user)])
 def get_document(doc_id: int) -> dict:
     doc = services.get_store().get_document(doc_id)
     if not doc:
@@ -147,7 +275,7 @@ def get_document(doc_id: int) -> dict:
 # --------------------------------------------------------------------------- #
 # pages: upload + ingest
 # --------------------------------------------------------------------------- #
-@app.post("/api/documents/{doc_id}/pages")
+@app.post("/api/documents/{doc_id}/pages", dependencies=[Depends(require_user)])
 async def upload_pages(doc_id: int, files: list[UploadFile] = File(...)) -> dict:
     store = services.get_store()
     doc = store.get_document(doc_id)
@@ -172,7 +300,7 @@ async def upload_pages(doc_id: int, files: list[UploadFile] = File(...)) -> dict
     return {"job_id": job_id, "pages": [s[1] for s in specs]}
 
 
-@app.get("/api/jobs/{job_id}")
+@app.get("/api/jobs/{job_id}", dependencies=[Depends(require_user)])
 def get_job(job_id: int) -> dict:
     job = services.get_store().get_job(job_id)
     if not job:
@@ -183,7 +311,7 @@ def get_job(job_id: int) -> dict:
 # --------------------------------------------------------------------------- #
 # pages: read
 # --------------------------------------------------------------------------- #
-@app.get("/api/documents/{doc_id}/pages/{page_number}")
+@app.get("/api/documents/{doc_id}/pages/{page_number}", dependencies=[Depends(require_user)])
 def get_page(doc_id: int, page_number: int) -> dict:
     page = services.get_store().get_page(doc_id, page_number)
     if not page:
@@ -192,7 +320,10 @@ def get_page(doc_id: int, page_number: int) -> dict:
     return page
 
 
-@app.get("/api/documents/{doc_id}/pages/{page_number}/image")
+@app.get(
+    "/api/documents/{doc_id}/pages/{page_number}/image",
+    dependencies=[Depends(require_user)],
+)
 def get_page_image(doc_id: int, page_number: int):
     path = services.get_store().get_page_image_path(doc_id, page_number)
     if not path:
@@ -216,7 +347,7 @@ def get_page_image(doc_id: int, page_number: int):
 # --------------------------------------------------------------------------- #
 # ask the archive (RAG)
 # --------------------------------------------------------------------------- #
-@app.post("/api/documents/{doc_id}/ask")
+@app.post("/api/documents/{doc_id}/ask", dependencies=[Depends(require_user)])
 def ask(doc_id: int, body: AskRequest) -> dict:
     store = services.get_store()
     if not store.get_document(doc_id):
@@ -237,7 +368,7 @@ def ask(doc_id: int, body: AskRequest) -> dict:
 # /ask above stays the fast path (~1 LLM call). The agent adds a tool-using loop
 # for the questions /ask cannot serve: narrative "what happened next" questions
 # that need pages read in order, and follow-ups that need conversation memory.
-@app.post("/api/documents/{doc_id}/agent")
+@app.post("/api/documents/{doc_id}/agent", dependencies=[Depends(require_user)])
 def ask_agent(doc_id: int, body: AgentAskRequest) -> dict:
     if not agent_cfg.enabled:
         raise HTTPException(503, "agent is disabled (AGENT_ENABLED=false)")
@@ -250,7 +381,10 @@ def ask_agent(doc_id: int, body: AgentAskRequest) -> dict:
     return ans.to_dict()
 
 
-@app.delete("/api/documents/{doc_id}/agent/threads/{thread_id}")
+@app.delete(
+    "/api/documents/{doc_id}/agent/threads/{thread_id}",
+    dependencies=[Depends(require_user)],
+)
 def delete_agent_thread(doc_id: int, thread_id: str) -> dict:
     """Forget one conversation ("New conversation" in the UI).
 
