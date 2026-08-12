@@ -27,8 +27,13 @@ doclayout-yolo==0.0.4
 # --- Inkference platform: RAG (Phase 4) ---
 sentence-transformers==5.6.0
 faiss-cpu==1.14.3
-scikit-learn==1.9.0
-scipy==1.17.1
+# Held one minor behind their latest by Kraken 7.0.2, which requires scikit-learn~=1.7.2
+# and scipy~=1.15.3 — each range admits exactly one release. Bumping either one puts pip
+# into ResolutionImpossible against kraken (same story as the torch/torchvision note
+# above). These are also the versions the HF Space resolves, so local matches deployed.
+# Only notebooks/cross_validation.ipynb uses either, via sklearn.model_selection.KFold.
+scikit-learn==1.7.2
+scipy==1.15.3
 
 # --- Inkference platform: API backend (Phase 5) ---
 fastapi==0.138.2
