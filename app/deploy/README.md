@@ -92,7 +92,15 @@ Without the keys the app still runs — correction and answers degrade to their 
 | `GEMINI_API_KEY` / `GOOGLE_API_KEY` | – (secret) | RAG fallback |
 | `INKFERENCE_LOG_LEVEL` | `INFO` | `DEBUG` for per-page/stage + provider logs |
 | `INKFERENCE_DATA_ROOT` | `/data` | ephemeral corpus store |
+| `INKFERENCE_AUTH_REQUIRED` | `true` | gate `/api` behind an account. **Set `false` for a public demo** — otherwise every visitor must sign up before seeing anything. |
+| `INKFERENCE_AUTH_DB` | `$INKFERENCE_DATA_ROOT/auth.db` | accounts + sessions. Never `inkference.db`: that file is uploaded to a public dataset. |
+| `INKFERENCE_COOKIE_SECURE` | `false` | send the session cookie over HTTPS only. **Set `true` on the Space.** |
+| `INKFERENCE_SESSION_TTL_DAYS` | `30` | session lifetime |
 | `CORS_ORIGINS` | `*` | allowed frontend origins |
+
+> **Note on `/data`.** It is ephemeral, so `auth.db` — and therefore every account —
+> is wiped by a Factory reboot. Fine for a demo; persistent accounts need a mounted
+> volume or an external database.
 
 Key resolution is provider-aware: `LLM_PROVIDER=groq` uses `GROQ_API_KEY`, `=gemini`
 uses `GEMINI_API_KEY`/`GOOGLE_API_KEY` — so switching the provider "just works".

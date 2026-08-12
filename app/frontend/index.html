@@ -11,8 +11,8 @@
 </head>
 <body>
   <!-- ===== Header ===== -->
-  <header class="app-header">
-    <div class="brand">
+  <header class="app-header" id="app-header">
+    <div class="brand" id="brand-home" role="link" tabindex="0" title="Go to your library">
       <div class="brand-mark">I</div>
       <div class="brand-name">Inkference</div>
     </div>
@@ -20,11 +20,128 @@
     <div class="doc-subtitle" id="doc-subtitle">—</div>
     <div class="spacer"></div>
     <nav class="tabs">
+      <button class="tab" data-view="library">Library</button>
       <button class="tab active" data-view="reader">Reader</button>
       <button class="tab" data-view="ask">Ask the Archive</button>
       <button class="tab" data-view="upload">Upload</button>
     </nav>
+    <div class="account" id="account">
+      <div class="avatar" id="avatar" title="">—</div>
+      <button class="link-btn signout" id="sign-out">Sign out</button>
+    </div>
   </header>
+
+  <!-- ===== Sign in / Create account ===== -->
+  <main class="view auth-view hidden" id="view-signin">
+    <section class="auth-brand">
+      <div class="brand">
+        <div class="brand-mark">I</div>
+        <div class="brand-name">Inkference</div>
+      </div>
+      <div class="auth-pitch">
+        <h1>Read what the hand wrote.</h1>
+        <p>Upload scanned pages, get a machine transcription with per-word confidence,
+           and question the whole archive in plain language.</p>
+        <div class="auth-stats" id="auth-stats"></div>
+      </div>
+      <div class="auth-foot">Your scans stay private to your library.</div>
+    </section>
+
+    <section class="auth-pane">
+      <form class="auth-card" id="auth-form" novalidate>
+        <div class="auth-tabs" role="tablist">
+          <button type="button" class="auth-tab active" id="tab-signin" data-mode="signin">Sign in</button>
+          <button type="button" class="auth-tab" id="tab-signup" data-mode="signup">Create account</button>
+        </div>
+
+        <h2 id="auth-title">Welcome back</h2>
+        <div class="auth-sub muted" id="auth-sub">Sign in to reach your library and transcriptions.</div>
+
+        <div class="providers" id="providers">
+          <button type="button" class="provider" disabled>
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 01-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 009 18z"/><path fill="#FBBC05" d="M3.97 10.72a5.4 5.4 0 010-3.44V4.95H.96a9 9 0 000 8.1l3.01-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 00.96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/></svg>
+            <span id="google-label">Continue with Google</span>
+          </button>
+          <div class="provider-row">
+            <button type="button" class="provider" disabled>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.36 12.7c.02 2.6 2.28 3.47 2.3 3.48-.02.06-.36 1.24-1.2 2.45-.72 1.05-1.47 2.1-2.65 2.12-1.16.02-1.53-.69-2.86-.69-1.32 0-1.74.67-2.83.71-1.14.04-2.01-1.13-2.73-2.18-1.48-2.15-2.61-6.07-1.09-8.72.75-1.31 2.1-2.15 3.57-2.17 1.11-.02 2.17.75 2.85.75.68 0 1.96-.93 3.3-.79.57.02 2.16.23 3.18 1.72-.08.05-1.9 1.11-1.88 3.32M14.2 4.9c.6-.73 1.01-1.75.9-2.76-.87.03-1.92.58-2.55 1.31-.56.64-1.05 1.68-.92 2.67.97.07 1.96-.49 2.57-1.22"/></svg>
+              Apple
+            </button>
+            <button type="button" class="provider" disabled>
+              <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><rect width="7" height="7" fill="#F25022"/><rect x="9" width="7" height="7" fill="#7FBA00"/><rect y="9" width="7" height="7" fill="#00A4EF"/><rect x="9" y="9" width="7" height="7" fill="#FFB900"/></svg>
+              Microsoft
+            </button>
+          </div>
+          <button type="button" class="provider" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2.5" stroke="currentColor" stroke-width="1.7"/><path d="M4 8l8 5.5L20 8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+            Continue with institutional SSO
+          </button>
+          <div class="provider-note muted small">
+            Single sign-on is not configured on this deployment — use an email and password.
+          </div>
+        </div>
+
+        <div class="or"><span>or</span></div>
+
+        <label class="field hidden" id="field-name">
+          <span>Full name</span>
+          <input id="auth-name" name="name" type="text" autocomplete="name" placeholder="Eleanor Hartley">
+        </label>
+        <label class="field">
+          <span>Email</span>
+          <input id="auth-email" name="email" type="email" autocomplete="email"
+                 placeholder="you@university.edu" required>
+        </label>
+        <label class="field">
+          <div class="field-head">
+            <span>Password</span>
+          </div>
+          <input id="auth-password" name="password" type="password"
+                 autocomplete="current-password" placeholder="••••••••••" required>
+        </label>
+
+        <div class="auth-error hidden" id="auth-error" role="alert"></div>
+
+        <button type="submit" class="auth-submit" id="auth-submit">Sign in</button>
+        <div class="auth-note muted" id="auth-note">New to Inkference? Create an account above.</div>
+      </form>
+    </section>
+  </main>
+
+  <!-- ===== Library (home) ===== -->
+  <main class="view library-view hidden" id="view-library">
+    <div class="library-body">
+      <a class="continue-card hidden" id="continue-card" href="#reader">
+        <div class="continue-cover"><img id="continue-cover-img" alt=""></div>
+        <div class="continue-meta">
+          <div class="eyebrow">Continue reading</div>
+          <div class="continue-title" id="continue-title">—</div>
+          <div class="continue-progress">
+            <div class="progress-track"><div class="progress-fill" id="continue-fill"></div></div>
+            <span class="muted small" id="continue-pos"></span>
+          </div>
+        </div>
+        <span class="primary-btn">Open reader</span>
+      </a>
+
+      <div class="section-head">
+        <h2>Your library</h2>
+        <div class="muted small" id="library-count"></div>
+      </div>
+
+      <div class="book-grid" id="book-grid">
+        <a class="add-book" href="#upload">
+          <div class="add-book-face">
+            <div class="add-plus">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="#f6ead8" stroke-width="2.2" stroke-linecap="round"/></svg>
+            </div>
+            <div class="add-title">Add a book</div>
+            <div class="add-sub muted">Upload scanned pages —<br>they become a book</div>
+          </div>
+        </a>
+      </div>
+    </div>
+  </main>
 
   <!-- ===== Reader ===== -->
   <main class="view" id="view-reader">

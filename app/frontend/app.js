@@ -2,7 +2,13 @@
    (override with window.INKFERENCE_API for a separately-hosted backend). */
 const API = (window.INKFERENCE_API || "") + "/api";
 
-const state = { doc: null, page: 1, totalPages: 0, pageData: null, readerView: null };
+const state = {
+  doc: null, page: 1, totalPages: 0, pageData: null, readerView: null,
+  docs: [],                 // every document, for the library grid
+  user: null,               // signed-in account, or null
+  authRequired: false,      // does this deployment gate its API?
+  gated: false,             // authRequired && signed out -> only #signin renders
+};
 
 /* ---------- helpers ---------- */
 const $ = (sel) => document.querySelector(sel);
@@ -19,8 +25,25 @@ function imageUrl(docId, page) {
 
 async function api(path, opts) {
   const r = await fetch(API + path, opts);
+  // A session can expire mid-visit. Bounce to sign-in once rather than letting every
+  // in-flight call fail silently and leave a half-empty page behind.
+  if (r.status === 401 && !path.startsWith("/auth/")) {
+    onSessionLost();
+    throw new Error("session expired");
+  }
   if (!r.ok) throw new Error((await r.text()) || r.status);
   return r.json();
+}
+
+function onSessionLost() {
+  if (state.gated) return;          // already showing sign-in
+  state.user = null;
+  state.gated = true;
+  renderAccount();
+  setAuthMode("signin");
+  authError("Your session expired. Please sign in again.");
+  showView("signin");
+  loadPublicStats();
 }
 
 /* confidence 1.0 -> dark ink, 0.0 -> faded; matches the legend gradient */
@@ -31,27 +54,270 @@ function confColor(c) {
   return `rgb(${mix[0]},${mix[1]},${mix[2]})`;
 }
 
-/* ---------- tabs ---------- */
+/* ---------- tabs / routing ---------- */
+const VIEWS = ["library", "reader", "ask", "upload", "signin"];
+
 document.querySelectorAll(".tab").forEach((t) => {
   t.addEventListener("click", () => showView(t.dataset.view));
 });
+$("#brand-home").addEventListener("click", () => showView("library"));
+$("#brand-home").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showView("library"); }
+});
+
 function showView(name) {
-  if (!["reader", "ask", "upload"].includes(name)) name = "reader";
+  // While signed out of a gated backend every route collapses to sign-in, so a
+  // hand-typed #reader can't render a shell whose data calls would all 401.
+  if (state.gated) name = "signin";
+  else if (name === "signin") name = "library";
+  if (!VIEWS.includes(name)) name = "library";
+
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === name));
   document.querySelectorAll(".view").forEach((v) => v.classList.add("hidden"));
   $("#view-" + name).classList.remove("hidden");
+  // Sign-in is a full-bleed page: the app chrome belongs to a session that doesn't exist yet.
+  $("#app-header").classList.toggle("hidden", name === "signin");
+  if (name === "library") renderLibrary();
   if (location.hash.slice(1) !== name) history.replaceState(null, "", "#" + name);
 }
 window.addEventListener("hashchange", () => showView(location.hash.slice(1)));
 
+/* ---------- accounts ---------- */
+/* The backend is the authority: /api/auth/me reports both the current user and
+   whether this deployment gates its API at all (INKFERENCE_AUTH_REQUIRED). */
+async function loadSession() {
+  try {
+    const info = await api("/auth/me");
+    state.user = info.user;
+    state.authRequired = info.auth_required;
+  } catch (e) {
+    state.user = null;
+    state.authRequired = false;   // backend unreachable — don't trap behind a gate we can't verify
+  }
+  state.gated = state.authRequired && !state.user;
+  renderAccount();
+}
+
+function renderAccount() {
+  const u = state.user;
+  $("#account").classList.toggle("hidden", !u);
+  if (!u) return;
+  const label = (u.name || u.email || "").trim();
+  const initials = label.includes("@")
+    ? label.slice(0, 2).toUpperCase()
+    : label.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+  $("#avatar").textContent = initials || "?";
+  $("#avatar").title = u.email;
+}
+
+/* Sign-in / create-account form */
+let authMode = "signin";
+
+function setAuthMode(mode) {
+  authMode = mode;
+  const signup = mode === "signup";
+  $("#tab-signin").classList.toggle("active", !signup);
+  $("#tab-signup").classList.toggle("active", signup);
+  $("#field-name").classList.toggle("hidden", !signup);
+  $("#auth-title").textContent = signup ? "Create your archive" : "Welcome back";
+  $("#auth-sub").textContent = signup
+    ? "Start reading and questioning your own scanned pages."
+    : "Sign in to reach your library and transcriptions.";
+  $("#google-label").textContent = signup ? "Sign up with Google" : "Continue with Google";
+  $("#auth-password").placeholder = signup ? "At least 10 characters" : "••••••••••";
+  $("#auth-password").autocomplete = signup ? "new-password" : "current-password";
+  $("#auth-submit").textContent = signup ? "Create account" : "Sign in";
+  $("#auth-note").textContent = signup
+    ? "Your account and password are stored on this deployment only."
+    : "New to Inkference? Create an account above.";
+  authError("");
+}
+
+function authError(msg) {
+  const box = $("#auth-error");
+  box.textContent = msg || "";
+  box.classList.toggle("hidden", !msg);
+}
+
+document.querySelectorAll(".auth-tab").forEach((t) => {
+  t.addEventListener("click", () => setAuthMode(t.dataset.mode));
+});
+
+$("#auth-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const email = $("#auth-email").value.trim();
+  const password = $("#auth-password").value;
+  if (!email || !password) return authError("Enter your email and password.");
+
+  const btn = $("#auth-submit");
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = authMode === "signup" ? "Creating account…" : "Signing in…";
+  authError("");
+  try {
+    const body = authMode === "signup"
+      ? { email, password, name: $("#auth-name").value.trim() || null }
+      : { email, password };
+    await api("/auth/" + (authMode === "signup" ? "signup" : "login"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    $("#auth-password").value = "";
+    await loadSession();
+    state.gated = false;
+    await loadCorpus();
+    showView("library");
+  } catch (err) {
+    authError(errorText(err) || "Something went wrong. Please try again.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+});
+
+/* FastAPI reports failures as {"detail": ...}; surface that rather than raw JSON. */
+function errorText(err) {
+  const raw = (err && err.message) || "";
+  try {
+    const parsed = JSON.parse(raw);
+    const detail = parsed.detail;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail) && detail[0] && detail[0].msg) return detail[0].msg;
+  } catch (e) { /* not JSON — fall through */ }
+  return raw;
+}
+
+$("#sign-out").addEventListener("click", async () => {
+  try { await api("/auth/logout", { method: "POST" }); } catch (e) { /* clear locally anyway */ }
+  state.user = null;
+  state.doc = null;
+  state.gated = state.authRequired;
+  renderAccount();
+  setAuthMode("signin");
+  showView(state.gated ? "signin" : "library");
+});
+
+/* Corpus totals for the signed-out brand panel. Public endpoint; if it fails the
+   stats are simply left out rather than filled with invented numbers. */
+async function loadPublicStats() {
+  let stats;
+  try { stats = await api("/stats"); } catch (e) { return; }
+  const cells = [];
+  if (stats.pages) {
+    cells.push([stats.pages.toLocaleString(), "pages transcribed"]);
+  }
+  if (stats.avg_confidence != null) {
+    cells.push([Math.round(stats.avg_confidence * 100) + "%", "average confidence"]);
+  }
+  $("#auth-stats").innerHTML = "";
+  for (const [value, label] of cells) {
+    const cell = el("div");
+    const v = el("div", "auth-stat-value"); v.textContent = value;
+    const l = el("div", "auth-stat-label"); l.textContent = label;
+    cell.append(v, l);
+    $("#auth-stats").append(cell);
+  }
+}
+
+/* ---------- Library ---------- */
+function renderLibrary() {
+  const grid = $("#book-grid");
+  const docs = state.docs || [];
+  grid.querySelectorAll(".book-card").forEach((c) => c.remove());
+
+  $("#library-count").textContent = docs.length
+    ? `${docs.length} ${docs.length === 1 ? "book" : "books"} · ` +
+      `${docs.reduce((n, d) => n + (d.page_count || 0), 0).toLocaleString()} pages`
+    : "";
+
+  for (const doc of docs) {
+    const card = el("a", "book-card");
+    card.href = "#reader";
+    card.addEventListener("click", () => openDocument(doc));
+
+    const cover = el("div", "book-cover");
+    const pending = (doc.page_count || 0) - (doc.pages_done || 0);
+    if (pending > 0) {
+      const badge = el("div", "book-badge");
+      badge.textContent = "Processing";
+      cover.append(badge);
+    }
+    // The first page doubles as the cover — no separate cover art exists.
+    if (doc.page_count) {
+      const img = el("img");
+      img.alt = "";
+      img.loading = "lazy";
+      img.src = `${API}/documents/${doc.id}/pages/1/image`;
+      img.onerror = () => img.remove();
+      cover.append(img);
+    }
+
+    const meta = el("div", "book-meta");
+    const title = el("div", "book-title");
+    title.textContent = doc.title;
+    const sub = el("div", "book-sub");
+    sub.textContent = [
+      doc.subtitle,
+      `${(doc.page_count || 0).toLocaleString()} pages`,
+      doc.avg_confidence != null ? `${Math.round(doc.avg_confidence * 100)}% confidence` : null,
+      pending > 0 ? `${pending} left` : null,
+    ].filter(Boolean).join(" · ");
+    meta.append(title, sub);
+
+    card.append(cover, meta);
+    grid.append(card);
+  }
+
+  renderContinueCard();
+}
+
+function renderContinueCard() {
+  const card = $("#continue-card");
+  const doc = state.doc;
+  if (!doc) { card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+  $("#continue-title").textContent = doc.title;
+  const total = doc.page_count || 0;
+  const page = Math.min(state.page || 1, total || 1);
+  $("#continue-fill").style.width = total ? `${Math.max(2, (page / total) * 100)}%` : "0%";
+  $("#continue-pos").textContent = total ? `page ${page} of ${total.toLocaleString()}` : "";
+  $("#continue-cover-img").src = `${API}/documents/${doc.id}/pages/${page}/image`;
+  $("#continue-cover-img").onerror = function () { this.style.display = "none"; };
+}
+
+async function openDocument(doc) {
+  if (state.doc && state.doc.id === doc.id) return;
+  state.doc = doc;
+  state.totalPages = doc.page_count;
+  $("#doc-subtitle").textContent = `${doc.title} · ${doc.subtitle || ""}`;
+  $("#ask-banner").textContent =
+    `Answers are drawn from all ${state.totalPages} transcribed pages of this document`;
+  await loadPage(1);
+}
+
 /* ---------- init ---------- */
 async function init() {
+  await loadSession();
+  if (state.gated) {
+    setAuthMode("signin");
+    showView("signin");
+    loadPublicStats();
+    return;
+  }
+  const hasDocs = await loadCorpus();
+  // Empty backend: Upload is the only view with anything to do.
+  if (!hasDocs) return showView("upload");
+  showView(location.hash ? location.hash.slice(1) : "library");
+}
+
+async function loadCorpus() {
   let docs = [];
   try { docs = await api("/documents"); } catch (e) { /* backend down */ }
+  state.docs = docs;
   if (!docs.length) {
     $("#doc-subtitle").textContent = "No documents — upload pages to begin";
-    showView("upload");
-    return;
+    return false;
   }
   state.doc = docs[0];
   state.totalPages = state.doc.page_count;
@@ -65,7 +331,7 @@ async function init() {
     if (health && health.agent_enabled === false) $("#ask-modes").classList.add("hidden");
   } catch (e) { /* health is advisory — leave the toggle as-is */ }
   await loadPage(1);
-  if (location.hash) showView(location.hash.slice(1));
+  return true;
 }
 
 /* ---------- Reader ---------- */

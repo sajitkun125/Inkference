@@ -275,8 +275,48 @@ class AgentConfig:
     history_turns: int = field(default_factory=lambda: _env_int("AGENT_HISTORY_TURNS", 6))
 
 
+@dataclass
+class AuthConfig:
+    """Accounts and sessions for the sign-in page.
+
+    The database is deliberately NOT inkference.db. deploy_all_books.sh copies that
+    file into a PUBLIC HF dataset, so anything stored there is published — password
+    hashes and session tokens must never ship. Same reasoning as AgentConfig's
+    checkpoint_path above.
+    """
+
+    db_path: Path = field(
+        default_factory=lambda: Path(
+            os.getenv("INKFERENCE_AUTH_DB", str(DATA_ROOT / "auth.db"))
+        )
+    )
+    # When False the API stays open and the frontend skips the sign-in gate. Set this
+    # for a public demo Space, where requiring an account would lock every visitor out.
+    required: bool = field(default_factory=lambda: _env_bool("INKFERENCE_AUTH_REQUIRED", True))
+    cookie_name: str = field(
+        default_factory=lambda: os.getenv("INKFERENCE_AUTH_COOKIE", "inkference_session")
+    )
+    session_ttl_days: int = field(
+        default_factory=lambda: _env_int("INKFERENCE_SESSION_TTL_DAYS", 30)
+    )
+    min_password_length: int = field(
+        default_factory=lambda: _env_int("INKFERENCE_MIN_PASSWORD_LEN", 10)
+    )
+    # scrypt cost. n must be a power of two; 2**14 keeps a hash near ~100ms on the
+    # free CPU Space, which is slow enough to matter and fast enough to log in.
+    scrypt_n: int = field(default_factory=lambda: _env_int("INKFERENCE_SCRYPT_N", 2**14))
+    scrypt_r: int = 8
+    scrypt_p: int = 1
+    # Send the session cookie only over HTTPS. Defaults off so http://localhost works;
+    # the Space serves HTTPS, so set INKFERENCE_COOKIE_SECURE=true there.
+    cookie_secure: bool = field(
+        default_factory=lambda: _env_bool("INKFERENCE_COOKIE_SECURE", False)
+    )
+
+
 htr = HTRConfig()
 rag = RAGConfig()
 store = StoreConfig()
 correction = CorrectionConfig()
 agent = AgentConfig()
+auth = AuthConfig()

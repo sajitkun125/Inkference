@@ -12,6 +12,7 @@ import threading
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 
+from ..auth import AuthStore
 from ..config import htr as htr_cfg
 from ..htr.pipeline import HTRPipeline
 from ..rag.index import RagIndex
@@ -31,6 +32,7 @@ _STAGE_STATUS = {
 _store: DocumentStore | None = None
 _pipeline: HTRPipeline | None = None
 _index: RagIndex | None = None
+_auth: AuthStore | None = None
 _pipeline_lock = threading.Lock()
 _executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ingest")
 
@@ -47,6 +49,13 @@ def get_index() -> RagIndex:
     if _index is None:
         _index = RagIndex()
     return _index
+
+
+def get_auth_store() -> AuthStore:
+    global _auth
+    if _auth is None:
+        _auth = AuthStore()
+    return _auth
 
 
 def get_pipeline() -> HTRPipeline:
