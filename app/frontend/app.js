@@ -99,15 +99,7 @@ async function loadSession() {
 }
 
 function renderAccount() {
-  const u = state.user;
-  $("#account").classList.toggle("hidden", !u);
-  if (!u) return;
-  const label = (u.name || u.email || "").trim();
-  const initials = label.includes("@")
-    ? label.slice(0, 2).toUpperCase()
-    : label.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
-  $("#avatar").textContent = initials || "?";
-  $("#avatar").title = u.email;
+  $("#account").classList.toggle("hidden", !state.user);
 }
 
 /* Sign-in / create-account form */
