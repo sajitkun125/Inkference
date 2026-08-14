@@ -198,8 +198,36 @@ class CorrectionConfig:
             or ""
         )
     )
+    # Paired with api_reasoning_effort="none" below — the two only make sense together.
+    #
+    # qwen3.6 respects the historical spelling this corpus is transcribed in: it fixes
+    # "Carpinter" -> "Carpenter" while leaving "repaird", "provd" and "ye scorbutick"
+    # alone. Both gpt-oss sizes modernise those, which is wrong for an 18th-century
+    # journal, and the 20b additionally leaks few-shot exemplar text into its output.
+    #
+    # Also deliberately NOT the model RAGConfig uses. Groq meters tokens per model
+    # (verified: draining gpt-oss-120b left gpt-oss-20b's budget untouched), so sharing
+    # one model would let a bulk ingest eat the same 8000 TPM bucket "Ask the Archive"
+    # answers from — degrading it to the Gemini fallback, and only after burning ~40s
+    # in _post_retry's backoff first.
     api_model: str = field(
         default_factory=lambda: os.getenv("CORRECTION_API_MODEL", "qwen/qwen3.6-27b")
+    )
+    # Sent only when non-empty; accepted values are model-specific (qwen3.6: none |
+    # default, gpt-oss: low | medium | high). Clear it for a model that rejects it.
+    #
+    # "none" is the API-level thinking switch, and the only setting that makes qwen3.6
+    # usable here — the in-prompt "/no_think" hint below is advisory and this model
+    # ignores it. Left thinking-enabled it spends the whole token budget reasoning,
+    # gets truncated before the closing </think>, and its monologue (dense with
+    # "N| ..." fragments) parses as corrected text. Off, a page costs ~450 tokens
+    # instead of ~4000 and the reply is only the answer.
+    #
+    # The cost: on the longest pages (~49 lines) it sometimes returns every line
+    # unchanged rather than correcting. That is a no-op, not a corruption — the lines
+    # still align 1:1 — so the page keeps its raw text and can be re-run.
+    api_reasoning_effort: str = field(
+        default_factory=lambda: os.getenv("CORRECTION_API_REASONING_EFFORT", "none").strip()
     )
     # few-shot
     num_shots: int = field(default_factory=lambda: _env_int("CORRECTION_NUM_SHOTS", 2))
@@ -211,14 +239,12 @@ class CorrectionConfig:
             )
         )
     )
-    # Must cover reasoning tokens too, not just the corrected lines: qwen3.6 ignores the
-    # `/no_think` soft switch and bills its thinking against this cap. At 2048 a 25-line
-    # page spent the entire budget reasoning and returned nothing parseable.
-    #
-    # Bounded from above by Groq's free tier, which counts `prompt + max_tokens` against
+    # Generous headroom rather than a working limit: with reasoning off a 49-line page
+    # spends ~650 completion tokens, so this is never the binding constraint. It is
+    # bounded from above by Groq's free tier, which counts `prompt + max_tokens` against
     # an 8000 tokens/minute limit and rejects the request outright (413) when the sum
     # exceeds it — so a bigger cap is not free headroom, it is a request that never runs.
-    # A 20-line page prompts at ~800 tokens, leaving 4096 comfortably inside the budget.
+    # A 49-line page prompts at ~1100 tokens, leaving 4096 comfortably inside the budget.
     max_new_tokens: int = field(
         default_factory=lambda: _env_int("CORRECTION_MAX_NEW_TOKENS", 4096)
     )

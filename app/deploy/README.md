@@ -84,7 +84,8 @@ Without the keys the app still runs — correction and answers degrade to their 
 | `TROCR_MODEL_ID` | `microsoft/trocr-base-handwritten` | recognizer (set to your Hub model) |
 | `HTR_MAX_LONG_EDGE` | `1600` | downscale cap (speed vs accuracy) |
 | `CORRECTION_ENABLED` / `CORRECTION_BACKEND` | `true` / `api` | Qwen correction via Groq |
-| `CORRECTION_API_MODEL` | `qwen/qwen3.6-27b` | Groq correction model |
+| `CORRECTION_API_MODEL` | `qwen/qwen3.6-27b` | Groq correction model. Must differ from `LLM_MODEL` — TPM buckets are per-model, so sharing one lets ingest starve Ask the Archive |
+| `CORRECTION_API_REASONING_EFFORT` | `none` | Sent only if non-empty. `none`/`default` on qwen3.6; `low`/`medium`/`high` on gpt-oss. Must stay `none` for qwen3.6 |
 | `LLM_PROVIDER` / `LLM_MODEL` | `groq` / `openai/gpt-oss-120b` | primary Ask-the-Archive model |
 | `LLM_FALLBACK` | `gemini:gemini-2.5-flash-lite` | ordered `provider:model` fallback chain |
 | `RAG_USE_CORRECTED` | `true` | index post-corrected text (`false` = raw TrOCR) |

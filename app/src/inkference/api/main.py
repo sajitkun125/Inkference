@@ -439,6 +439,10 @@ def health() -> dict:
             "correction_backend": correction_cfg.backend,
             "correction_model": (correction_cfg.api_model if correction_cfg.backend == "api"
                                  else correction_cfg.model_id),
+            # Reported because it decides whether correction works at all, and because a
+            # server started before an .env edit keeps serving the old value — this is
+            # the quickest way to tell a stale process from a real fault.
+            "correction_reasoning_effort": correction_cfg.api_reasoning_effort or None,
             "agent_enabled": agent_cfg.enabled,
             "agent_max_steps": agent_cfg.max_steps,
             "auth_required": auth_cfg.required,
