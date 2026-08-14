@@ -103,6 +103,11 @@ celerybeat.pid
 
 # Environments
 .env
+# Backups and per-machine variants of .env hold the same secrets the file does, and
+# the bare `.env` rule above does not cover them. `.env.example` is the one exception:
+# it is the checked-in template and holds no values.
+.env.*
+!.env.example
 .venv
 env/
 venv/

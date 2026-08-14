@@ -17,7 +17,7 @@ indexed so you can read it side-by-side with the scan or just *ask the archive* 
 
 | View | What it does |
 |---|---|
-| **Sign in** | Create an account or sign in. Real accounts: scrypt-hashed passwords, server-side sessions, an HttpOnly cookie. Gates every `/api` route except `/api/health`, `/api/stats`, and `/api/auth/*`. |
+| **Sign in** | Create an account, sign in with a password, or continue with **Google** / **Microsoft Entra ID**. scrypt-hashed passwords, server-side sessions, an HttpOnly cookie. Gates every `/api` route except `/api/health`, `/api/ready`, `/api/stats`, and `/api/auth/*`. |
 | **Library** | Home. Every document as a cover card (page 1 doubles as the cover) with page count and average confidence, a **Continue reading** card, and an **Add a book** tile into Upload. |
 | **Reader** | Scan next to its transcription; per-word **confidence tinting**, page-average %, and a Raw ⟷ Corrected toggle (green = LLM edits). Page navigation is cyclic. |
 | **Ask the Archive** | Ask a natural-language question; get a grounded answer with **source-page citations**, or an in-character **"Answer as Author"** (Forster) response. |
@@ -25,18 +25,41 @@ indexed so you can read it side-by-side with the scan or just *ask the archive* 
 
 ### Accounts
 
-Accounts live in their own SQLite file (`INKFERENCE_AUTH_DB`, default `auth.db` beside
-the corpus) — deliberately **not** in `inkference.db`, which `deploy_all_books.sh`
-uploads to a public HF dataset. Passwords are never stored, only a salted scrypt hash;
-session cookies are stored as a SHA-256 digest, so a copy of `auth.db` yields neither a
-usable password nor a usable session.
+Accounts live in **PostgreSQL** (`DATABASE_URL`), deliberately **not** in
+`inkference.db`, which `deploy_all_books.sh` uploads to a public HF dataset. Passwords
+are never stored, only a salted scrypt hash; session cookies are stored as a SHA-256
+digest, so a dump of the database yields neither a usable password nor a usable session.
+
+Postgres rather than a file because sessions have to outlive a deploy and be shared
+across replicas — a container-local database would give every replica a different set
+of users and discard them all on the next revision. Schema changes go through Alembic;
+the app migrates itself at startup under a PostgreSQL advisory lock, so replicas
+starting together don't race.
+
+```bash
+docker compose -f app/deploy/docker-compose.dev.yml up -d    # local Postgres
+```
 
 Set `INKFERENCE_AUTH_REQUIRED=false` to leave the API open — the sign-in page and
-accounts still work, nothing is gated. That is the right setting for a public demo
-Space, where a gate would lock every visitor out.
+accounts still work, nothing is gated. That is the right setting for a public demo,
+where a gate would lock every visitor out.
 
-The Google / Apple / Microsoft / SSO buttons are rendered **disabled**: OAuth needs
-provider credentials this deployment doesn't have. Email and password is the working path.
+**Federated sign-in.** *Continue with Google* and *Microsoft* run a full OpenID Connect
+authorization-code flow: PKCE, a signed single-use state cookie, and `id_token`
+signatures verified against the provider's published JWKS — issuer, audience, expiry,
+and nonce all checked. Set the client id and secret for a provider and its button
+lights up; leave them unset and it stays greyed out with an explanation, since a button
+that leads to a provider this deployment has no credentials for is a dead end. Apple is
+not implemented.
+
+One person can hold several ways in — password, Google, Entra — joined into one account
+by their **verified** email address, and keyed on the provider's immutable subject id so
+a renamed mailbox keeps its library. An address the provider will not vouch for is
+refused outright: because a provider sign-in adopts an existing account with a matching
+address, accepting an unverified claim would be an account-takeover primitive.
+
+Deployment, provider registration, and the failure modes worth knowing:
+**[app/deploy/AZURE.md](app/deploy/AZURE.md)**.
 
 ### Reader
 
@@ -69,7 +92,8 @@ over the page as they are found.
 - **RAG** — `all-MiniLM-L6-v2` embeddings + **FAISS** retrieval → grounded answer from a
   free-tier LLM (Groq `gpt-oss-120b` → Gemini fallback → extractive), with page citations.
 - **Agent** — an optional **LangGraph** research loop for questions plain RAG can't serve.
-- **Serving** — **FastAPI** backend + static frontend; **SQLite** store; background ingest jobs.
+- **Serving** — **FastAPI** backend + static frontend; **SQLite** corpus store,
+  **PostgreSQL** for accounts and sessions; background ingest jobs.
 
 ## Ask the Archive: two modes
 

@@ -58,6 +58,34 @@ def get_auth_store() -> AuthStore:
     return _auth
 
 
+def init_database() -> None:
+    """Migrate the accounts database, once, at application startup.
+
+    Deliberately fatal on failure. An app that boots without its accounts database
+    would serve a sign-in page that 500s on every submission — better that the
+    container fails its health probe and the previous revision keeps serving.
+    """
+    from ..auth.migrate import upgrade_to_head
+    from ..config import database as db_cfg
+
+    if not db_cfg.migrate_on_startup:
+        logger.info("DB_MIGRATE_ON_STARTUP=false — skipping migrations")
+        return
+    try:
+        upgrade_to_head(db_cfg)
+    except Exception as exc:
+        # A bare connection traceback here is the least useful thing a first-time
+        # deployer can be handed, so say what is wrong and what to do about it.
+        logger.error(
+            "Could not reach the accounts database at %s: %s\n"
+            "Accounts require PostgreSQL. Locally:\n"
+            "    docker compose -f app/deploy/docker-compose.dev.yml up -d\n"
+            "Deployed: set DATABASE_URL (Azure Postgres needs ?sslmode=require).",
+            db_cfg.safe_url, exc,
+        )
+        raise
+
+
 def get_pipeline() -> HTRPipeline:
     global _pipeline
     if _pipeline is None:

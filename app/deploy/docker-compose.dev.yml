@@ -1,0 +1,40 @@
+# Local PostgreSQL for development. The accounts database only — the corpus stays
+# in SQLite (inkference.db), which is read-mostly, shipped as a build artefact, and
+# has no reason to move.
+#
+#   docker compose -f app/deploy/docker-compose.dev.yml up -d
+#   docker compose -f app/deploy/docker-compose.dev.yml down       # keeps the volume
+#   docker compose -f app/deploy/docker-compose.dev.yml down -v    # wipes accounts
+#
+# The credentials below are DatabaseConfig's default URL, so a fresh checkout needs
+# no DATABASE_URL to run locally. They are development-only by construction: the
+# port is bound to 127.0.0.1, so nothing off this machine can reach the server.
+services:
+  db:
+    # Pinned to the major Azure Database for PostgreSQL Flexible Server offers, so
+    # local and deployed agree on behaviour that actually differs between majors
+    # (this schema: MERGE, and the planner's handling of the partial unique index).
+    image: postgres:16-alpine
+    container_name: inkference-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: inkference
+      POSTGRES_PASSWORD: inkference
+      POSTGRES_DB: inkference
+      # Deterministic collation, so ORDER BY on an email column sorts the same here
+      # as on the server rather than following the host's locale.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - inkference_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # `docker compose up --wait` blocks on this, so a migration started right
+      # after boot doesn't race the server's own startup recovery.
+      test: ["CMD-SHELL", "pg_isready -U inkference -d inkference"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  inkference_pgdata:

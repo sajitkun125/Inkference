@@ -6,10 +6,14 @@ for a public demo without removing accounts.
 
 Endpoints:
   GET  /api/health
+  GET  /api/ready                        readiness probe (checks PostgreSQL)
   POST /api/auth/signup                  create an account -> session cookie
   POST /api/auth/login                   session cookie
   POST /api/auth/logout                  clear the session
   GET  /api/auth/me                      current user (null when signed out)
+  GET  /api/auth/providers               which federated sign-ins are configured
+  GET  /api/auth/oidc/{provider}/start   redirect to Google / Microsoft Entra ID
+  GET  /api/auth/oidc/{provider}/callback   provider returns here -> session cookie
   GET  /api/documents
   POST /api/documents
   GET  /api/documents/{id}
@@ -27,15 +31,17 @@ import logging
 import os
 import re
 import unicodedata
+from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import quote
 
-from fastapi import Cookie, Depends, FastAPI, File, HTTPException, Response, UploadFile
+from fastapi import Cookie, Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from ..auth import EmailTaken
+from ..auth import AccountDisabled, EmailTaken
 from ..config import (
     FRONTEND_DIR,
     IMAGES_BASE_URL,
@@ -43,7 +49,9 @@ from ..config import (
     agent as agent_cfg,
     auth as auth_cfg,
     correction as correction_cfg,
+    database as db_cfg,
     htr as htr_cfg,
+    oidc as oidc_cfg,
     rag as rag_cfg,
 )
 from ..rag.answer import answer_question
@@ -67,7 +75,20 @@ def _setup_logging() -> None:
 _setup_logging()
 logger = logging.getLogger("inkference.api")
 
-app = FastAPI(title="Inkference", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Migrate the accounts database before the first request is served.
+
+    Failure here is intentionally fatal: an app that starts without its accounts
+    database serves a sign-in page that 500s on submit. Crashing instead means the
+    Container Apps revision never goes healthy and the previous one keeps serving.
+    """
+    services.init_database()
+    yield
+
+
+app = FastAPI(title="Inkference", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -187,7 +208,10 @@ def signup(body: SignupRequest, response: Response) -> dict:
 @app.post("/api/auth/login")
 def login(body: LoginRequest, response: Response) -> dict:
     store = services.get_auth_store()
-    user = store.authenticate(body.email, body.password)
+    try:
+        user = store.authenticate(body.email, body.password)
+    except AccountDisabled:
+        raise HTTPException(403, "this account has been disabled")
     if user is None:
         # One message for both "no such account" and "wrong password" so the
         # response cannot be used to enumerate registered addresses.
@@ -209,7 +233,196 @@ def logout(
 @app.get("/api/auth/me")
 def me(user=Depends(current_user)) -> dict:
     """Who am I? Drives the frontend gate, so it stays 200 when signed out."""
-    return {"user": user, "auth_required": auth_cfg.required}
+    return {
+        "user": user,
+        "auth_required": auth_cfg.required,
+        "providers": _provider_list(),
+    }
+
+
+@app.get("/api/auth/providers")
+def auth_providers() -> dict:
+    """Which federated sign-ins this deployment can actually perform.
+
+    Public: it reveals only which buttons work, which the sign-in page has to render
+    before any session exists. Client ids are omitted — they are not secret, but
+    nothing on this page needs them.
+    """
+    return {"providers": _provider_list()}
+
+
+def _provider_list() -> list[dict]:
+    return [
+        {"key": p.key, "label": p.label, "enabled": p.enabled}
+        for p in oidc_cfg.providers.values()
+    ]
+
+
+# --------------------------------------------------------------------------- #
+# federated sign-in (OpenID Connect: Google, Microsoft Entra ID)
+# --------------------------------------------------------------------------- #
+# Both providers use the same authorization-code flow, so these two routes serve
+# either one — the {provider} segment picks the config, and inkference.auth.oidc
+# does the protocol work. See that module for what guards each step.
+def _external_base_url(request: Request) -> str:
+    """The origin a browser reached us on.
+
+    Container Apps' ingress terminates TLS and forwards plain http to the container,
+    so `request.url` reads http://<internal-ip>:8000 — useless as an OAuth redirect
+    target. Order of preference: the configured public URL (always right), then the
+    proxy's forwarded headers, then the raw request (correct only for direct local
+    runs). Forwarded headers are honoured only when trust_proxy_headers is on,
+    because a client can forge them.
+    """
+    if auth_cfg.public_base_url:
+        return auth_cfg.public_base_url
+
+    if auth_cfg.trust_proxy_headers:
+        # Both headers are comma-separated lists when several proxies are chained;
+        # the first entry is the one nearest the client.
+        proto = request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
+        host = request.headers.get("x-forwarded-host", "").split(",")[0].strip()
+        if proto and host:
+            return f"{proto}://{host}"
+
+    return str(request.base_url).rstrip("/")
+
+
+def _redirect_uri(request: Request, provider_key: str) -> str:
+    """Must match an authorized redirect URI registered with the provider, byte for
+    byte — a trailing slash difference is enough for Google to refuse the exchange."""
+    return f"{_external_base_url(request)}/api/auth/oidc/{provider_key}/callback"
+
+
+def _require_provider(provider_key: str):
+    provider = oidc_cfg.get(provider_key)
+    if provider is None:
+        raise HTTPException(404, "unknown sign-in provider")
+    if not provider.enabled:
+        raise HTTPException(
+            503, f"{provider.label} sign-in is not configured on this deployment"
+        )
+    return provider
+
+
+def _set_oauth_state_cookie(response: Response, value: str | None) -> None:
+    """The in-flight sign-in, or None to clear it.
+
+    SameSite=Lax rather than Strict: the callback arrives as a cross-site top-level
+    navigation from the provider, and Strict would withhold the cookie exactly then,
+    breaking every sign-in. Lax still sends it on that navigation while withholding
+    it from cross-site subresource requests, which is the protection that matters.
+    """
+    if value is None:
+        response.delete_cookie(_OAUTH_STATE_COOKIE, path="/api/auth/oidc")
+        return
+    response.set_cookie(
+        _OAUTH_STATE_COOKIE,
+        value,
+        max_age=auth_cfg.oauth_state_ttl_seconds,
+        httponly=True,
+        samesite="lax",
+        secure=auth_cfg.cookie_secure,
+        # Scoped to the OAuth routes: it is useless anywhere else, and a cookie that
+        # is not sent is a cookie that cannot leak.
+        path="/api/auth/oidc",
+    )
+
+
+_OAUTH_STATE_COOKIE = "inkference_oauth"
+
+
+@app.get("/api/auth/oidc/{provider_key}/start")
+def oidc_start(provider_key: str, request: Request):
+    """Begin a federated sign-in: redirect the browser to the provider."""
+    from ..auth import oidc
+
+    provider = _require_provider(provider_key)
+    try:
+        url, sealed = oidc.begin(provider, _redirect_uri(request, provider.key), auth_cfg)
+    except oidc.OIDCError as exc:
+        # Discovery is the only thing that can fail this early, and it means the
+        # provider is unreachable rather than that the user did anything wrong.
+        logger.error("oidc start failed for %s: %s", provider.key, exc)
+        raise HTTPException(502, f"could not reach {provider.label}")
+
+    response = RedirectResponse(url, status_code=307)
+    _set_oauth_state_cookie(response, sealed)
+    return response
+
+
+@app.get("/api/auth/oidc/{provider_key}/callback")
+def oidc_callback(
+    provider_key: str,
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+    error_description: str | None = None,
+    oauth_state: str | None = Cookie(default=None, alias=_OAUTH_STATE_COOKIE),
+):
+    """Finish a federated sign-in and land the browser back in the app.
+
+    Always answers with a redirect, never JSON: the user's browser is here as a
+    top-level navigation, so an error has to arrive somewhere that can render it.
+    Failures go to #signin with a short, non-specific message — the detail goes to
+    the log, since provider errors describe our configuration.
+    """
+    from ..auth import oidc
+
+    provider = _require_provider(provider_key)
+
+    if error:
+        # The user pressed "Cancel" on the consent screen, or the provider refused.
+        logger.info("oidc %s returned error=%s (%s)", provider.key, error, error_description)
+        return _oidc_failure(
+            "Sign-in was cancelled."
+            if error == "access_denied"
+            else f"{provider.label} could not sign you in."
+        )
+    if not code:
+        return _oidc_failure("That sign-in link was incomplete. Please try again.")
+
+    try:
+        identity, return_to = oidc.complete(
+            provider,
+            code=code,
+            state=state or "",
+            sealed_state=oauth_state,
+            redirect_uri=_redirect_uri(request, provider.key),
+            cfg=auth_cfg,
+        )
+    except oidc.EmailNotVerified as exc:
+        logger.warning("oidc %s: unverified address %s", provider.key, exc)
+        return _oidc_failure(
+            f"{provider.label} has not verified that email address, so it cannot be "
+            "used to sign in."
+        )
+    except oidc.OIDCError as exc:
+        logger.error("oidc %s callback failed: %s", provider.key, exc)
+        return _oidc_failure("Sign-in could not be completed. Please try again.")
+
+    store = services.get_auth_store()
+    try:
+        user = store.upsert_oauth_user(
+            identity.provider, identity.subject, identity.email, identity.name
+        )
+    except AccountDisabled:
+        return _oidc_failure("This account has been disabled.")
+
+    logger.info("signed in via %s: user id=%s", provider.key, user["id"])
+    target = return_to if return_to.startswith("/") else "/#library"
+    response = RedirectResponse(target, status_code=303)
+    _set_session_cookie(response, store.create_session(user["id"], auth_method=provider.key))
+    _set_oauth_state_cookie(response, None)   # single use — it has done its job
+    return response
+
+
+def _oidc_failure(message: str) -> RedirectResponse:
+    """Back to the sign-in page with a message the frontend renders in the error box."""
+    response = RedirectResponse(f"/?auth_error={quote(message)}#signin", status_code=303)
+    _set_oauth_state_cookie(response, None)
+    return response
 
 
 # --------------------------------------------------------------------------- #
@@ -217,6 +430,8 @@ def me(user=Depends(current_user)) -> dict:
 # --------------------------------------------------------------------------- #
 @app.get("/api/health")
 def health() -> dict:
+    """Liveness. Answers from process state only — no database, no network — so a
+    Postgres blip cannot get healthy containers restarted. Readiness is /api/ready."""
     return {"status": "ok", "trocr_model": htr_cfg.trocr_model_id,
             "llm_provider": rag_cfg.llm_provider,
             "llm_configured": bool(rag_cfg.llm_api_key),
@@ -226,7 +441,30 @@ def health() -> dict:
                                  else correction_cfg.model_id),
             "agent_enabled": agent_cfg.enabled,
             "agent_max_steps": agent_cfg.max_steps,
-            "auth_required": auth_cfg.required}
+            "auth_required": auth_cfg.required,
+            "auth_providers": [p["key"] for p in _provider_list() if p["enabled"]]}
+
+
+@app.get("/api/ready")
+def ready(response: Response) -> dict:
+    """Readiness. Point the Container Apps readiness probe here.
+
+    Reports 503 while Postgres is unreachable, which takes this replica out of the
+    ingress rotation instead of letting it answer every sign-in with a 500.
+    """
+    from ..auth.db import check_connection
+    from ..auth.migrate import current_revision
+
+    db_ok = check_connection(db_cfg)
+    if not db_ok:
+        response.status_code = 503
+        return {"status": "degraded", "database": "unreachable"}
+    return {
+        "status": "ok",
+        "database": "ok",
+        "database_url": db_cfg.safe_url,   # password blanked by safe_url
+        "schema_revision": current_revision(db_cfg),
+    }
 
 
 @app.get("/api/stats")

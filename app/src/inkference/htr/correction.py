@@ -158,8 +158,10 @@ class PostCorrector:
                 "CORRECTION_BACKEND=api but no API key found "
                 "(set CORRECTION_API_KEY or GROQ_API_KEY)."
             )
-        # Disable Qwen3 "thinking" (soft switch) so reasoning tokens don't eat the
-        # completion budget and truncate long pages. Also cap output generously.
+        # `/no_think` is a soft switch the model may ignore — qwen3.6 does, and thinks
+        # anyway. Kept for backends that still honour it, but the real defence against
+        # reasoning tokens eating the budget is a generous max_new_tokens (see
+        # CorrectionConfig.max_new_tokens), plus _strip_think() on the reply.
         msgs = list(messages)
         msgs[-1] = {**msgs[-1], "content": msgs[-1]["content"] + "\n/no_think"}
         payload = {"model": self.cfg.api_model, "messages": msgs,

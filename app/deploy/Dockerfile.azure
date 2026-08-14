@@ -1,0 +1,81 @@
+# Inkference — Azure Container Apps image.
+#
+# Differs from deploy/Dockerfile (the Hugging Face Space) in the ways that matter
+# behind a managed ingress:
+#   * uvicorn runs with --proxy-headers, so request.url reflects the external
+#     https:// origin instead of the internal http:// address the container sees.
+#     Without it every OAuth redirect URI comes out wrong and both providers refuse.
+#   * accounts live in PostgreSQL (DATABASE_URL), not in a container-local file.
+#   * no corpus seeding on boot — the corpus is baked at build time, and a seed step
+#     would run once per replica on every scale-out.
+#
+# Build context = repo root:
+#     docker build -f app/deploy/Dockerfile.azure -t inkference:latest .
+#
+# See app/deploy/AZURE.md for the full deployment, including the provider setup.
+FROM python:3.11-slim
+
+# System libs for the Pillow / torch / kraken image stack.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libgl1 libglib2.0-0 && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN useradd -m -u 1000 app
+WORKDIR /app
+
+COPY app/deploy/requirements-space.txt .
+RUN pip install --no-cache-dir -r requirements-space.txt
+
+COPY app/pyproject.toml ./
+COPY app/alembic.ini ./
+COPY app/migrations/ ./migrations/
+COPY app/src/ ./src/
+COPY app/frontend/ ./frontend/
+RUN pip install --no-cache-dir -e . --no-deps && \
+    mkdir -p /data && chown -R app:app /app /data
+
+ENV INKFERENCE_DATA_ROOT=/data \
+    HF_HOME=/home/app/.cache/huggingface \
+    PORT=8000 \
+    PYTHONUNBUFFERED=1 \
+    INKFERENCE_LOG_LEVEL=INFO \
+    # Container Apps terminates TLS at the ingress and forwards plain http, so the
+    # session cookie must still be marked Secure — the browser only ever sees https.
+    INKFERENCE_COOKIE_SECURE=true \
+    INKFERENCE_AUTH_REQUIRED=true \
+    INKFERENCE_TRUST_PROXY_HEADERS=true \
+    # --- recognition ---
+    TROCR_MODEL_ID=microsoft/trocr-base-handwritten \
+    HTR_MAX_LONG_EDGE=1600 \
+    HTR_NUM_BEAMS=1 \
+    # --- post-correction + RAG ---
+    CORRECTION_ENABLED=true \
+    CORRECTION_BACKEND=api \
+    CORRECTION_API_BASE=https://api.groq.com/openai/v1 \
+    CORRECTION_API_MODEL=qwen/qwen3-32b \
+    LLM_PROVIDER=groq \
+    LLM_MODEL=openai/gpt-oss-120b \
+    LLM_FALLBACK=gemini:gemini-2.5-flash-lite \
+    RAG_USE_CORRECTED=true
+
+# Injected as Container Apps secrets, never baked into the image — see AZURE.md:
+#   DATABASE_URL                    postgresql://…?sslmode=require
+#   INKFERENCE_SECRET_KEY           HMAC key for the OAuth state cookie
+#   INKFERENCE_PUBLIC_BASE_URL      https://<app>.<env>.azurecontainerapps.io
+#   GOOGLE_OAUTH_CLIENT_ID/_SECRET  Google Cloud OAuth client
+#   MICROSOFT_OAUTH_CLIENT_ID/_SECRET, MICROSOFT_OAUTH_TENANT
+#   GROQ_API_KEY, GEMINI_API_KEY
+
+USER app
+
+RUN python -c "from sentence_transformers import SentenceTransformer as S; S('sentence-transformers/all-MiniLM-L6-v2')"
+RUN python -c "from transformers import TrOCRProcessor, VisionEncoderDecoderModel as M; TrOCRProcessor.from_pretrained('microsoft/trocr-base-handwritten'); M.from_pretrained('microsoft/trocr-base-handwritten')"
+
+EXPOSE 8000
+
+# --forwarded-allow-ips=* is safe here ONLY because Container Apps' ingress is the
+# sole route to the container — it strips client-supplied X-Forwarded-* and sets its
+# own. Exposing this container directly to the internet would make it a lie.
+# One worker: uvicorn workers do not share the SQLAlchemy pool, and Container Apps
+# scales by replica, not by process.
+CMD ["sh", "-c", "exec uvicorn inkference.api.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips='*' --workers 1"]
