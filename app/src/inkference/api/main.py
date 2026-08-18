@@ -39,7 +39,8 @@ from fastapi import Cookie, Depends, FastAPI, File, HTTPException, Request, Resp
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel ,EmailStr, Field
+from email_validator import validate_email, EmailNotValidError ,EmailUndeliverableError
 
 from ..auth import AccountDisabled, EmailTaken
 from ..config import (
@@ -140,17 +141,17 @@ def _slugify(text: str) -> str:
 # accounts + sessions
 # --------------------------------------------------------------------------- #
 class SignupRequest(BaseModel):
-    email: str
+    email: EmailStr | None = Field(default=None)
     password: str
     name: str | None = None
 
 
 class LoginRequest(BaseModel):
-    email: str
+    email: EmailStr | None = Field(default=None)
     password: str
 
 
-_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+#_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def current_user(session: str | None = Cookie(default=None, alias=auth_cfg.cookie_name)):
@@ -186,16 +187,24 @@ def _set_session_cookie(response: Response, token: str) -> None:
 
 @app.post("/api/auth/signup")
 def signup(body: SignupRequest, response: Response) -> dict:
-    email = (body.email or "").strip()
-    if not _EMAIL_RE.match(email):
-        raise HTTPException(422, "enter a valid email address")
+   # email = (body.email or "").strip()
+    #if not _EMAIL_RE.match(email):
+     #   raise HTTPException(422, "enter a valid email address")
+    try: 
+        validate_email(body.email, check_deliverability=True)
+
+    except (EmailUndeliverableError, EmailNotValidError) as e:
+            raise HTTPException(422 , f"{str(e)}" )
+    if(not validEmail):
+        raise HTTPException(422 , "Email Address does not exist" )
+        
     if len(body.password or "") < auth_cfg.min_password_length:
         raise HTTPException(
             422, f"password must be at least {auth_cfg.min_password_length} characters"
         )
     store = services.get_auth_store()
     try:
-        user = store.create_user(email, body.password, name=body.name)
+        user = store.create_user(body.email, body.password, name=body.name)
     except EmailTaken:
         # Deliberately explicit: signup cannot hide that an address is taken, since
         # the account simply cannot be created twice.

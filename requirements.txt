@@ -17,6 +17,7 @@ jiwer==4.0.0
 sentencepiece==0.2.1
 tiktoken==0.13.0
 protobuf==7.35.0
+email-validator==2.3.0
 # Line segmentation (segmentManualTranscriptionsIntoLinesWithKraken.ipynb).
 # Kraken pins its own torch/numpy — install in a dedicated venv if it conflicts with the above.
 kraken==7.0.2
