@@ -24,6 +24,7 @@ dependencies = [
 htr = ["kraken", "doclayout-yolo"]
 rag = ["sentence-transformers", "faiss-cpu"]
 api = ["fastapi", "uvicorn[standard]", "python-multipart"]
+auth = ["SQLAlchemy>=2.0", "alembic", "psycopg[binary]", "PyJWT[crypto]"]
 agent = ["langgraph", "langgraph-checkpoint-sqlite"]
 eval = ["jiwer", "evaluate"]
 

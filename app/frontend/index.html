@@ -26,7 +26,6 @@
       <button class="tab" data-view="upload">Upload</button>
     </nav>
     <div class="account" id="account">
-      <div class="avatar" id="avatar" title="">—</div>
       <button class="link-btn signout" id="sign-out">Sign out</button>
     </div>
   </header>
@@ -57,26 +56,26 @@
         <h2 id="auth-title">Welcome back</h2>
         <div class="auth-sub muted" id="auth-sub">Sign in to reach your library and transcriptions.</div>
 
+        <!-- Provider buttons start disabled and are enabled by renderProviders()
+             for whichever ones /api/auth/providers reports as configured. A button
+             that navigates to a provider this deployment has no credentials for is
+             a dead end, so the backend decides, not the markup. -->
         <div class="providers" id="providers">
-          <button type="button" class="provider" disabled>
+          <button type="button" class="provider" id="provider-google" data-provider="google" disabled>
             <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 01-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 009 18z"/><path fill="#FBBC05" d="M3.97 10.72a5.4 5.4 0 010-3.44V4.95H.96a9 9 0 000 8.1l3.01-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 00.96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/></svg>
             <span id="google-label">Continue with Google</span>
           </button>
           <div class="provider-row">
-            <button type="button" class="provider" disabled>
+            <button type="button" class="provider" disabled title="Apple sign-in is not available on this deployment">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.36 12.7c.02 2.6 2.28 3.47 2.3 3.48-.02.06-.36 1.24-1.2 2.45-.72 1.05-1.47 2.1-2.65 2.12-1.16.02-1.53-.69-2.86-.69-1.32 0-1.74.67-2.83.71-1.14.04-2.01-1.13-2.73-2.18-1.48-2.15-2.61-6.07-1.09-8.72.75-1.31 2.1-2.15 3.57-2.17 1.11-.02 2.17.75 2.85.75.68 0 1.96-.93 3.3-.79.57.02 2.16.23 3.18 1.72-.08.05-1.9 1.11-1.88 3.32M14.2 4.9c.6-.73 1.01-1.75.9-2.76-.87.03-1.92.58-2.55 1.31-.56.64-1.05 1.68-.92 2.67.97.07 1.96-.49 2.57-1.22"/></svg>
               Apple
             </button>
-            <button type="button" class="provider" disabled>
+            <button type="button" class="provider" id="provider-microsoft" data-provider="microsoft" disabled>
               <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><rect width="7" height="7" fill="#F25022"/><rect x="9" width="7" height="7" fill="#7FBA00"/><rect y="9" width="7" height="7" fill="#00A4EF"/><rect x="9" y="9" width="7" height="7" fill="#FFB900"/></svg>
-              Microsoft
+              <span id="microsoft-label">Microsoft</span>
             </button>
           </div>
-          <button type="button" class="provider" disabled>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2.5" stroke="currentColor" stroke-width="1.7"/><path d="M4 8l8 5.5L20 8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
-            Continue with institutional SSO
-          </button>
-          <div class="provider-note muted small">
+          <div class="provider-note muted small" id="provider-note">
             Single sign-on is not configured on this deployment — use an email and password.
           </div>
         </div>

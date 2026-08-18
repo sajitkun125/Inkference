@@ -8,6 +8,7 @@ const state = {
   user: null,               // signed-in account, or null
   authRequired: false,      // does this deployment gate its API?
   gated: false,             // authRequired && signed out -> only #signin renders
+  providers: [],            // federated sign-ins: [{key, label, enabled}]
 };
 
 /* ---------- helpers ---------- */
@@ -90,24 +91,65 @@ async function loadSession() {
     const info = await api("/auth/me");
     state.user = info.user;
     state.authRequired = info.auth_required;
+    state.providers = info.providers || [];
   } catch (e) {
     state.user = null;
     state.authRequired = false;   // backend unreachable — don't trap behind a gate we can't verify
+    state.providers = [];
   }
   state.gated = state.authRequired && !state.user;
   renderAccount();
+  renderProviders();
+}
+
+/* Federated sign-in buttons.
+
+   The markup ships them disabled and this turns on only the providers the backend
+   reports as configured — a button that bounces the user to Google when this
+   deployment holds no Google credentials is a worse experience than a greyed-out
+   one with an explanation. */
+function renderProviders() {
+  const enabled = state.providers.filter((p) => p.enabled);
+  state.providers.forEach((p) => {
+    const btn = document.querySelector(`[data-provider="${p.key}"]`);
+    if (!btn) return;                     // provider the frontend has no button for
+    btn.disabled = !p.enabled;
+    btn.title = p.enabled ? `Continue with ${p.label}` : `${p.label} sign-in is not configured here`;
+  });
+  const note = $("#provider-note");
+  if (note) {
+    note.textContent = enabled.length
+      ? "You can also sign in with an email and password."
+      : "Single sign-on is not configured on this deployment — use an email and password.";
+  }
+}
+
+/* A provider sign-in is a full-page navigation, not fetch(): the browser has to
+   follow the redirect to Google/Microsoft, and the state cookie the backend sets on
+   the way out must be stored as a first-party cookie. XHR would do neither. */
+document.querySelectorAll("[data-provider]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    if (btn.disabled) return;
+    btn.classList.add("busy");
+    window.location.href = `${API}/auth/oidc/${btn.dataset.provider}/start`;
+  });
+});
+
+/* The OAuth callback reports failures by bouncing back to /?auth_error=…#signin,
+   since a redirected browser has nowhere else to render one. Show it, then strip it
+   from the URL so a refresh doesn't resurrect a stale message. */
+function showOAuthErrorFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const message = params.get("auth_error");
+  if (!message) return;
+  authError(message);
+  params.delete("auth_error");
+  const query = params.toString();
+  history.replaceState(null, "", location.pathname + (query ? "?" + query : "") + location.hash);
 }
 
 function renderAccount() {
-  const u = state.user;
-  $("#account").classList.toggle("hidden", !u);
-  if (!u) return;
-  const label = (u.name || u.email || "").trim();
-  const initials = label.includes("@")
-    ? label.slice(0, 2).toUpperCase()
-    : label.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
-  $("#avatar").textContent = initials || "?";
-  $("#avatar").title = u.email;
+  $("#account").classList.toggle("hidden", !state.user);
 }
 
 /* Sign-in / create-account form */
@@ -302,6 +344,9 @@ async function init() {
   if (state.gated) {
     setAuthMode("signin");
     showView("signin");
+    // After setAuthMode, which clears the error box — otherwise the message a
+    // failed provider sign-in just redirected us here to show gets wiped.
+    showOAuthErrorFromUrl();
     loadPublicStats();
     return;
   }

@@ -198,8 +198,36 @@ class CorrectionConfig:
             or ""
         )
     )
+    # Paired with api_reasoning_effort="none" below — the two only make sense together.
+    #
+    # qwen3.6 respects the historical spelling this corpus is transcribed in: it fixes
+    # "Carpinter" -> "Carpenter" while leaving "repaird", "provd" and "ye scorbutick"
+    # alone. Both gpt-oss sizes modernise those, which is wrong for an 18th-century
+    # journal, and the 20b additionally leaks few-shot exemplar text into its output.
+    #
+    # Also deliberately NOT the model RAGConfig uses. Groq meters tokens per model
+    # (verified: draining gpt-oss-120b left gpt-oss-20b's budget untouched), so sharing
+    # one model would let a bulk ingest eat the same 8000 TPM bucket "Ask the Archive"
+    # answers from — degrading it to the Gemini fallback, and only after burning ~40s
+    # in _post_retry's backoff first.
     api_model: str = field(
-        default_factory=lambda: os.getenv("CORRECTION_API_MODEL", "qwen/qwen3-32b")
+        default_factory=lambda: os.getenv("CORRECTION_API_MODEL", "qwen/qwen3.6-27b")
+    )
+    # Sent only when non-empty; accepted values are model-specific (qwen3.6: none |
+    # default, gpt-oss: low | medium | high). Clear it for a model that rejects it.
+    #
+    # "none" is the API-level thinking switch, and the only setting that makes qwen3.6
+    # usable here — the in-prompt "/no_think" hint below is advisory and this model
+    # ignores it. Left thinking-enabled it spends the whole token budget reasoning,
+    # gets truncated before the closing </think>, and its monologue (dense with
+    # "N| ..." fragments) parses as corrected text. Off, a page costs ~450 tokens
+    # instead of ~4000 and the reply is only the answer.
+    #
+    # The cost: on the longest pages (~49 lines) it sometimes returns every line
+    # unchanged rather than correcting. That is a no-op, not a corruption — the lines
+    # still align 1:1 — so the page keeps its raw text and can be re-run.
+    api_reasoning_effort: str = field(
+        default_factory=lambda: os.getenv("CORRECTION_API_REASONING_EFFORT", "none").strip()
     )
     # few-shot
     num_shots: int = field(default_factory=lambda: _env_int("CORRECTION_NUM_SHOTS", 2))
@@ -211,8 +239,14 @@ class CorrectionConfig:
             )
         )
     )
+    # Generous headroom rather than a working limit: with reasoning off a 49-line page
+    # spends ~650 completion tokens, so this is never the binding constraint. It is
+    # bounded from above by Groq's free tier, which counts `prompt + max_tokens` against
+    # an 8000 tokens/minute limit and rejects the request outright (413) when the sum
+    # exceeds it — so a bigger cap is not free headroom, it is a request that never runs.
+    # A 49-line page prompts at ~1100 tokens, leaving 4096 comfortably inside the budget.
     max_new_tokens: int = field(
-        default_factory=lambda: _env_int("CORRECTION_MAX_NEW_TOKENS", 2048)
+        default_factory=lambda: _env_int("CORRECTION_MAX_NEW_TOKENS", 4096)
     )
     temperature: float = field(
         default_factory=lambda: _env_float("CORRECTION_TEMPERATURE", 0.2)
@@ -279,17 +313,12 @@ class AgentConfig:
 class AuthConfig:
     """Accounts and sessions for the sign-in page.
 
-    The database is deliberately NOT inkference.db. deploy_all_books.sh copies that
-    file into a PUBLIC HF dataset, so anything stored there is published — password
-    hashes and session tokens must never ship. Same reasoning as AgentConfig's
-    checkpoint_path above.
+    Accounts live in PostgreSQL (see DatabaseConfig), deliberately NOT in
+    inkference.db. deploy_all_books.sh copies that file into a PUBLIC HF dataset, so
+    anything stored there is published — password hashes and session tokens must
+    never ship. Same reasoning as AgentConfig's checkpoint_path above.
     """
 
-    db_path: Path = field(
-        default_factory=lambda: Path(
-            os.getenv("INKFERENCE_AUTH_DB", str(DATA_ROOT / "auth.db"))
-        )
-    )
     # When False the API stays open and the frontend skips the sign-in gate. Set this
     # for a public demo Space, where requiring an account would lock every visitor out.
     required: bool = field(default_factory=lambda: _env_bool("INKFERENCE_AUTH_REQUIRED", True))
@@ -308,10 +337,189 @@ class AuthConfig:
     scrypt_r: int = 8
     scrypt_p: int = 1
     # Send the session cookie only over HTTPS. Defaults off so http://localhost works;
-    # the Space serves HTTPS, so set INKFERENCE_COOKIE_SECURE=true there.
+    # every real deployment must set INKFERENCE_COOKIE_SECURE=true.
     cookie_secure: bool = field(
         default_factory=lambda: _env_bool("INKFERENCE_COOKIE_SECURE", False)
     )
+    # Absolute external origin, e.g.
+    #   https://inkference.happysea-1a2b.westeurope.azurecontainerapps.io
+    # Behind Container Apps' ingress the app sees plain http on an internal address, so
+    # an OAuth redirect URI built from the request would read http://10.0.0.4:8000/… and
+    # be rejected by both providers. Set this and the redirect URI is exact; leave it
+    # empty and we fall back to the X-Forwarded-* headers, then to the raw request URL.
+    public_base_url: str = field(
+        default_factory=lambda: os.getenv("INKFERENCE_PUBLIC_BASE_URL", "").strip().rstrip("/")
+    )
+    # Trust X-Forwarded-Proto/Host only when the app really is behind a proxy that sets
+    # them. A client can forge those headers, so honouring them on a directly exposed
+    # app would let a caller steer the OAuth redirect at a host they control. Container
+    # Apps' ingress always sets them, hence the default.
+    trust_proxy_headers: bool = field(
+        default_factory=lambda: _env_bool("INKFERENCE_TRUST_PROXY_HEADERS", True)
+    )
+    # Seconds a half-finished sign-in stays valid — the window between bouncing the
+    # user to the provider and their return. Short: it is a round trip, not a session.
+    oauth_state_ttl_seconds: int = field(
+        default_factory=lambda: _env_int("INKFERENCE_OAUTH_STATE_TTL", 600)
+    )
+    # HMAC key for the short-lived OAuth state cookie. MUST be set, and set to the
+    # same value on every replica: the sign-in that starts on replica A finishes on
+    # replica B, and a per-process random key would reject it as forged. Unset, we
+    # generate an ephemeral one and log a warning — workable for a single container,
+    # broken the moment Container Apps scales past one. Generate with:
+    #   python -c "import secrets; print(secrets.token_urlsafe(48))"
+    secret_key: str = field(
+        default_factory=lambda: os.getenv("INKFERENCE_SECRET_KEY", "").strip()
+    )
+
+
+@dataclass
+class DatabaseConfig:
+    """PostgreSQL, everywhere. No file-backed fallback, on purpose.
+
+    Accounts moved off the old sqlite3 file when this stopped being a single-process
+    demo. Container Apps gives each replica its own container filesystem, so a SQLite
+    auth.db would mean every replica held a different set of users — all of them
+    discarded on the next revision. Postgres is also what lets a session outlive a
+    deploy.
+
+    DATABASE_URL is the single knob. Azure Database for PostgreSQL requires TLS, so
+    the deployed URL must carry `?sslmode=require`.
+    """
+
+    # The default matches deploy/docker-compose.dev.yml, so a fresh checkout runs after
+    # `docker compose -f app/deploy/docker-compose.dev.yml up -d` with nothing exported.
+    url: str = field(
+        default_factory=lambda: os.getenv("DATABASE_URL", "").strip()
+        or "postgresql+psycopg://inkference:inkference@localhost:5432/inkference"
+    )
+    # Per-replica pool. Azure Postgres Flexible Server on the small burstable tiers caps
+    # connections in the low tens and Container Apps may hold several replicas, so keep
+    # this modest: (pool_size + max_overflow) * replicas must stay under the server's
+    # max_connections, or a scale-out event exhausts it.
+    pool_size: int = field(default_factory=lambda: _env_int("DB_POOL_SIZE", 5))
+    max_overflow: int = field(default_factory=lambda: _env_int("DB_MAX_OVERFLOW", 5))
+    # Azure's gateway drops idle TCP connections at around four minutes, without a FIN
+    # the client can see. Recycling inside that window is what prevents the classic
+    # "server closed the connection unexpectedly" on the first request after a lull.
+    pool_recycle_seconds: int = field(default_factory=lambda: _env_int("DB_POOL_RECYCLE", 180))
+    # Cheap liveness check before a pooled connection is handed out: costs a round trip,
+    # saves a 500 when a connection died between checkouts.
+    pool_pre_ping: bool = field(default_factory=lambda: _env_bool("DB_POOL_PRE_PING", True))
+    echo: bool = field(default_factory=lambda: _env_bool("DB_ECHO", False))
+    # Statement timeout (ms) applied to every connection. Auth queries are all indexed
+    # point lookups; anything still running after seconds is a fault, not slowness.
+    statement_timeout_ms: int = field(
+        default_factory=lambda: _env_int("DB_STATEMENT_TIMEOUT_MS", 10_000)
+    )
+    # Run `alembic upgrade head` during startup. Convenient for a single-replica
+    # Container App. Turn it OFF once you scale out or migrate from a release job, so N
+    # replicas don't race to migrate the same database on deploy.
+    migrate_on_startup: bool = field(
+        default_factory=lambda: _env_bool("DB_MIGRATE_ON_STARTUP", True)
+    )
+
+    @property
+    def normalized_url(self) -> str:
+        """Force the driver we actually ship.
+
+        Managed Postgres services hand out `postgres://` or bare `postgresql://` URLs,
+        and SQLAlchemy maps the latter to psycopg2, which is not installed. Rewriting
+        here means a connection string pasted straight from the Azure portal works
+        without anyone having to know the driver name.
+        """
+        url = self.url
+        if url.startswith("postgres://"):
+            url = "postgresql://" + url[len("postgres://"):]
+        if url.startswith("postgresql://"):
+            url = "postgresql+psycopg://" + url[len("postgresql://"):]
+        return url
+
+    @property
+    def safe_url(self) -> str:
+        """The URL with the password blanked, for logs and /api/health."""
+        url = self.normalized_url
+        if "://" not in url or "@" not in url:
+            return url
+        scheme, rest = url.split("://", 1)
+        creds, host = rest.rsplit("@", 1)
+        user = creds.split(":", 1)[0]
+        return f"{scheme}://{user}:***@{host}"
+
+
+@dataclass(frozen=True)
+class OIDCProvider:
+    """One OpenID Connect identity provider.
+
+    Google and Microsoft Entra ID differ only in these fields — discovery document,
+    credentials, a couple of authorize-time parameters — so the flow is written once
+    against this shape instead of once per provider.
+    """
+
+    key: str                 # URL segment: /api/auth/oidc/{key}/start
+    label: str               # shown in the UI
+    discovery_url: str
+    client_id: str
+    client_secret: str
+    scopes: str = "openid email profile"
+    # Appended to the authorize URL. `prompt=select_account` on both providers: without
+    # it a browser already signed into one account reuses it silently, which makes
+    # "wrong account, let me pick another" impossible from inside the app.
+    extra_auth_params: tuple[tuple[str, str], ...] = (("prompt", "select_account"),)
+
+    @property
+    def enabled(self) -> bool:
+        """Both halves or nothing. A client id without a secret still renders a working
+        button, then fails at the token exchange — after the user has already been
+        bounced to the provider and back."""
+        return bool(self.client_id and self.client_secret)
+
+
+def _google_provider() -> OIDCProvider:
+    return OIDCProvider(
+        key="google",
+        label="Google",
+        discovery_url="https://accounts.google.com/.well-known/openid-configuration",
+        client_id=os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip(),
+        client_secret=os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "").strip(),
+    )
+
+
+def _microsoft_provider() -> OIDCProvider:
+    # The tenant decides who may sign in: a tenant GUID locks it to one organisation,
+    # "organizations" admits any work/school account, "common" adds personal Microsoft
+    # accounts. Defaulting to "organizations" keeps the door narrower than "common" —
+    # widen it deliberately, per deployment.
+    tenant = os.getenv("MICROSOFT_OAUTH_TENANT", "organizations").strip() or "organizations"
+    return OIDCProvider(
+        key="microsoft",
+        label="Microsoft",
+        discovery_url=(
+            f"https://login.microsoftonline.com/{tenant}/v2.0/.well-known/openid-configuration"
+        ),
+        client_id=os.getenv("MICROSOFT_OAUTH_CLIENT_ID", "").strip(),
+        client_secret=os.getenv("MICROSOFT_OAUTH_CLIENT_SECRET", "").strip(),
+    )
+
+
+@dataclass
+class OIDCConfig:
+    """The provider registry.
+
+    Unconfigured providers stay in the registry but report enabled=False, which renders
+    their button greyed out with an explanation rather than hiding it.
+    """
+
+    providers: dict[str, OIDCProvider] = field(
+        default_factory=lambda: {p.key: p for p in (_google_provider(), _microsoft_provider())}
+    )
+
+    def get(self, key: str) -> OIDCProvider | None:
+        return self.providers.get(key)
+
+    @property
+    def any_enabled(self) -> bool:
+        return any(p.enabled for p in self.providers.values())
 
 
 htr = HTRConfig()
@@ -320,3 +528,5 @@ store = StoreConfig()
 correction = CorrectionConfig()
 agent = AgentConfig()
 auth = AuthConfig()
+database = DatabaseConfig()
+oidc = OIDCConfig()

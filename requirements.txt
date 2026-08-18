@@ -17,6 +17,7 @@ jiwer==4.0.0
 sentencepiece==0.2.1
 tiktoken==0.13.0
 protobuf==7.35.0
+email-validator==2.3.0
 # Line segmentation (segmentManualTranscriptionsIntoLinesWithKraken.ipynb).
 # Kraken pins its own torch/numpy — install in a dedicated venv if it conflicts with the above.
 kraken==7.0.2
@@ -59,5 +60,23 @@ langsmith==0.10.15
 # langgraph-sdk requires websockets<16; uvicorn[standard] is happy with >=10.4.
 websockets==15.0.1
 
+# --- Inkference platform: accounts, federated sign-in, PostgreSQL (Phase 7) ---
+# The auth store runs on PostgreSQL in deployment and SQLite locally; SQLAlchemy is
+# what lets one AuthStore serve both, and Alembic keeps the two schemas in step.
+SQLAlchemy==2.0.52
+alembic==1.19.1
+# psycopg 3. The [binary] extra ships prebuilt wheels, so the container image needs
+# no libpq-dev or compiler at build time.
+psycopg[binary]==3.3.4
+# id_token signature verification against Google's/Entra's published JWKS.
+# The [crypto] extra pulls `cryptography`, without which RS256 cannot be verified.
+PyJWT[crypto]==2.13.0
+cryptography==50.0.0
+
 # --- dev/test (not installed on the Space) ---
 pytest==8.4.2
+# The auth suite runs against a real PostgreSQL in Docker rather than a stand-in. The
+# migrations are the part most worth testing, and the constraint behaviour the store
+# relies on (unique violations surfacing as IntegrityError, ON DELETE CASCADE,
+# timestamptz round-tripping) is exactly what a substitute engine gets subtly wrong.
+testcontainers[postgres]==4.15.0

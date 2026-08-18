@@ -40,3 +40,11 @@ langgraph-sdk==0.4.2
 langsmith==0.10.15
 # langgraph-sdk requires websockets<16; uvicorn[standard] needs >=10.4.
 websockets==15.0.1
+
+# Accounts + federated sign-in. Required: the app migrates its accounts database on
+# startup and refuses to boot without one, so these are not optional extras.
+SQLAlchemy==2.0.52
+alembic==1.19.1
+psycopg[binary]==3.3.4
+PyJWT[crypto]==2.13.0
+cryptography==50.0.0

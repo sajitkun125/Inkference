@@ -74,6 +74,19 @@ def _strip_think(text: str) -> str:
     return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
 
+def _truncated_reasoning(text: str) -> bool:
+    """True when a reply opened a <think> block and never closed it.
+
+    That means the model was cut off mid-thought, so _strip_think can't remove the
+    monologue — and the monologue is dense with "N| ..." fragments (the model quoting
+    and debating each input line) that the line parser accepts as corrected text. The
+    result passes the >=50% hit check and writes reasoning like
+    "1| the shp saild ... -> gaile is likely OCR for gale" into the transcription.
+    Cheaper to reject the whole reply and keep the raw page.
+    """
+    return "<think>" in text and "</think>" not in text
+
+
 class PostCorrector:
     def __init__(self, cfg: CorrectionConfig = default_correction) -> None:
         self.cfg = cfg
@@ -158,13 +171,17 @@ class PostCorrector:
                 "CORRECTION_BACKEND=api but no API key found "
                 "(set CORRECTION_API_KEY or GROQ_API_KEY)."
             )
-        # Disable Qwen3 "thinking" (soft switch) so reasoning tokens don't eat the
-        # completion budget and truncate long pages. Also cap output generously.
+        # `/no_think` is a soft switch the model may ignore — qwen3.6 does, and thinks
+        # anyway. Kept for backends that still honour it, but the real defence against
+        # reasoning tokens eating the budget is a generous max_new_tokens (see
+        # CorrectionConfig.max_new_tokens), plus _strip_think() on the reply.
         msgs = list(messages)
         msgs[-1] = {**msgs[-1], "content": msgs[-1]["content"] + "\n/no_think"}
         payload = {"model": self.cfg.api_model, "messages": msgs,
                    "temperature": self.cfg.temperature,
                    "max_tokens": self.cfg.max_new_tokens}
+        if self.cfg.api_reasoning_effort:
+            payload["reasoning_effort"] = self.cfg.api_reasoning_effort
         headers = {"Authorization": f"Bearer {self.cfg.api_key}"}
         # Retry on 429 (free-tier rate limits) honouring Retry-After, with backoff.
         for attempt in range(4):
@@ -186,6 +203,11 @@ class PostCorrector:
             return CorrectionResult(lines=[], page_text="", raw_prompt_lines=[])
         messages = self.build_messages(marked)
         reply = self._run_api(messages) if self.cfg.backend == "api" else self._run_local(messages)
+
+        # A reply cut off mid-reasoning parses into confident-looking nonsense, so it
+        # has to be rejected before the line parser ever sees it.
+        if _truncated_reasoning(reply):
+            return CorrectionResult(lines=None, page_text=reply.strip(), raw_prompt_lines=marked)
 
         # Parse "N| text" replies -> {line_number: corrected_text}. Robust to the
         # model dropping/merging lines: we map by number and fill any gaps from raw.

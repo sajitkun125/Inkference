@@ -283,12 +283,6 @@ body {
 /* ===== Header: account chip ===== */
 .brand { cursor: pointer; }
 .account { display: flex; align-items: center; gap: 12px; color: var(--muted-2); }
-.avatar {
-  width: 30px; height: 30px; border-radius: 50%;
-  background: #3a2e20; border: 1px solid rgba(255,255,255,.1);
-  display: flex; align-items: center; justify-content: center;
-  font-family: var(--serif); font-size: 13px; color: #d9c8a8;
-}
 .signout { font-size: 13px; color: var(--muted-2); }
 .signout:hover { color: #f4ead8; }
 
@@ -338,9 +332,14 @@ body {
   cursor: pointer;
 }
 .provider:hover:not(:disabled) { border-color: #c0ad8d; background: #fffdf8; }
-/* Disabled on purpose: OAuth needs provider credentials this deployment doesn't have.
-   Shown rather than hidden so the design reads as intended, greyed so it can't mislead. */
+/* A provider whose credentials this deployment doesn't hold. renderProviders()
+   enables the ones the backend reports as configured; the rest stay shown but greyed,
+   so the design reads as intended without offering a button that leads nowhere. */
 .provider:disabled { opacity: .45; cursor: not-allowed; }
+/* Held between the click and the browser actually leaving for the provider. The
+   redirect can take a moment on a cold backend, and without this the button looks
+   like it ignored the click. */
+.provider.busy { opacity: .6; pointer-events: none; }
 .provider-note { line-height: 1.5; }
 
 .or { display: flex; align-items: center; gap: 12px; margin: 22px 0; }

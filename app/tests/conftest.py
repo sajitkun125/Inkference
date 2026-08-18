@@ -1,10 +1,83 @@
-"""Shared fixtures. Everything here is offline — no model loads, no provider calls."""
+"""Shared fixtures.
+
+Offline in the sense that matters: no model loads and no provider calls. The auth
+fixtures do start a local PostgreSQL in Docker, because the accounts store runs on
+Postgres in every environment and a substitute engine would test different
+behaviour than the one that ships. Tests needing it skip cleanly where Docker is
+not available (see `postgres_url`).
+"""
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import text
 
-from inkference.config import AgentConfig, StoreConfig
+from inkference.config import AgentConfig, AuthConfig, DatabaseConfig, StoreConfig
 from inkference.store import DocumentStore
+
+@pytest.fixture(scope="session")
+def scrypt_n() -> int:
+    """Well below the production 2**14, so the suite is not dominated by KDF cost.
+
+    A fixture rather than a module constant because conftest is not importable —
+    pytest loads it as a plugin, not as part of a package.
+    """
+    return 2**8
+
+
+@pytest.fixture(scope="session")
+def postgres_url() -> str:
+    """A throwaway PostgreSQL, one per test session."""
+    try:
+        # testcontainers 4.13 moved the modules under .community and deprecated the
+        # old paths; keep both so the suite runs on either side of that split.
+        try:
+            from testcontainers.community.postgres import PostgresContainer
+        except ImportError:
+            from testcontainers.postgres import PostgresContainer
+    except ImportError:  # pragma: no cover - depends on the local install
+        pytest.skip("testcontainers is not installed (pip install 'testcontainers[postgres]')")
+
+    try:
+        # Same major as deploy/docker-compose.dev.yml and Azure Flexible Server.
+        with PostgresContainer("postgres:16-alpine", driver="psycopg") as container:
+            yield container.get_connection_url()
+    except Exception as exc:  # pragma: no cover - environment-dependent
+        pytest.skip(f"Docker is not available for the accounts database: {exc}")
+
+
+@pytest.fixture(scope="session")
+def migrated_database(postgres_url):
+    """The container, migrated to head. Session-scoped: Alembic runs once, not per test."""
+    from inkference.auth.db import dispose_engine, get_engine
+    from inkference.auth.migrate import upgrade_to_head
+
+    cfg = DatabaseConfig(url=postgres_url, pool_size=2, max_overflow=2,
+                         migrate_on_startup=True)
+    dispose_engine()          # the engine is a module singleton; drop any earlier one
+    get_engine(cfg)
+    upgrade_to_head(cfg)
+    yield cfg
+    dispose_engine()
+
+
+@pytest.fixture
+def db_cfg(migrated_database):
+    """Migrated and empty. TRUNCATE rather than a fresh container per test: it costs
+    milliseconds instead of seconds, and RESTART IDENTITY keeps ids predictable."""
+    from inkference.auth.db import get_engine
+
+    with get_engine(migrated_database).begin() as conn:
+        conn.execute(
+            text("TRUNCATE users, oauth_identities, sessions RESTART IDENTITY CASCADE")
+        )
+    return migrated_database
+
+
+@pytest.fixture
+def auth_store(db_cfg, scrypt_n):
+    from inkference.auth import AuthStore
+
+    return AuthStore(AuthConfig(scrypt_n=scrypt_n), db_cfg)
 
 
 @pytest.fixture
