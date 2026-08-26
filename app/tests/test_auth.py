@@ -25,9 +25,24 @@ def client(db_cfg, scrypt_n, monkeypatch):
     """TestClient with auth pointed at the throwaway database and the gate on."""
     from inkference.api import main, services
 
-    cfg = AuthConfig(scrypt_n=scrypt_n, required=True, secret_key="test-secret")
+    cfg = AuthConfig(
+        scrypt_n=scrypt_n, required=True, secret_key="test-secret",
+        # No DNS from the suite. With it on, every signup below would depend on a
+        # resolver and on example.com — which is reserved and publishes a null MX,
+        # so it is deliberately undeliverable.
+        email_check_deliverability=False,
+    )
     monkeypatch.setattr(main, "auth_cfg", cfg)
     monkeypatch.setattr(main, "db_cfg", db_cfg)
+    # A fixed, empty provider registry. Without this the suite reads whatever
+    # credentials happen to be in the developer's .env, so tests asserting
+    # "unconfigured" pass or fail depending on whose machine they run on.
+    monkeypatch.setattr(main, "oidc_cfg", OIDCConfig(providers={
+        "google": OIDCProvider(key="google", label="Google", discovery_url="x",
+                               client_id="", client_secret=""),
+        "microsoft": OIDCProvider(key="microsoft", label="Microsoft", discovery_url="x",
+                                  client_id="", client_secret=""),
+    }))
     monkeypatch.setattr(services, "_auth", AuthStore(cfg, db_cfg))
     # The fixture already migrated; re-running it inside the lifespan would only
     # re-take the advisory lock for nothing.
@@ -310,6 +325,33 @@ def test_signup_validates_email_and_password_length(client):
     assert client.post(
         "/api/auth/signup", json={"email": "ada@example.com", "password": "short"}
     ).status_code == 422
+    for bad in ("", "ada@", "@example.com", "ada@@example.com", "ada example@x.com"):
+        assert client.post(
+            "/api/auth/signup", json={"email": bad, "password": PASSWORD}
+        ).status_code == 422, bad
+
+
+def test_signup_succeeds_for_a_valid_address(client):
+    """Regression: the validated-email branch once referenced an undefined name, so
+    every syntactically VALID address 500'd while invalid ones were correctly
+    refused — the failure was invisible to any test that only tried bad input."""
+    r = client.post(
+        "/api/auth/signup", json={"email": "ada@example.com", "password": PASSWORD}
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["user"]["email"] == "ada@example.com"
+
+
+def test_signup_normalizes_the_address(client):
+    """One address must not become two accounts through case alone."""
+    assert client.post(
+        "/api/auth/signup", json={"email": "Ada@EXAMPLE.com", "password": PASSWORD}
+    ).status_code == 200
+    client.post("/api/auth/logout")
+    again = client.post(
+        "/api/auth/signup", json={"email": "ada@example.com", "password": PASSWORD}
+    )
+    assert again.status_code == 409
 
 
 def test_duplicate_signup_is_a_conflict(client):
