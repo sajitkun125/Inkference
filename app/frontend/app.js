@@ -9,6 +9,11 @@ const state = {
   authRequired: false,      // does this deployment gate its API?
   gated: false,             // authRequired && signed out -> only #signin renders
   providers: [],            // federated sign-ins: [{key, label, enabled}]
+  // Upload destination. true = the next upload starts a NEW book; false = it is
+  // appended to state.doc. Set true by the "Add a book" tile, false by the Upload
+  // tab. It exists because "whichever book is currently open" is not an intention
+  // anyone expressed — that default silently filed new scans into the open book.
+  newBookMode: false,
 };
 
 /* ---------- helpers ---------- */
@@ -59,7 +64,17 @@ function confColor(c) {
 const VIEWS = ["library", "reader", "ask", "upload", "signin"];
 
 document.querySelectorAll(".tab").forEach((t) => {
-  t.addEventListener("click", () => showView(t.dataset.view));
+  t.addEventListener("click", () => {
+    // Reaching Upload from the nav means "add to what I'm reading". Reaching it
+    // from the Add-a-book tile means "start a new one" — see #add-book below.
+    if (t.dataset.view === "upload") state.newBookMode = false;
+    showView(t.dataset.view);
+  });
+});
+
+$("#add-book").addEventListener("click", () => {
+  state.newBookMode = true;
+  showView("upload");
 });
 $("#brand-home").addEventListener("click", () => showView("library"));
 $("#brand-home").addEventListener("keydown", (e) => {
@@ -79,6 +94,7 @@ function showView(name) {
   // Sign-in is a full-bleed page: the app chrome belongs to a session that doesn't exist yet.
   $("#app-header").classList.toggle("hidden", name === "signin");
   if (name === "library") renderLibrary();
+  if (name === "upload") renderUploadTarget();
   if (location.hash.slice(1) !== name) history.replaceState(null, "", "#" + name);
 }
 window.addEventListener("hashchange", () => showView(location.hash.slice(1)));
@@ -587,18 +603,94 @@ function setStep(stage) {
   });
 }
 
+/* Show, and let the user change, where the next upload lands. */
+function renderUploadTarget() {
+  const box = $("#upload-target");
+  if (!box) return;
+  box.innerHTML = "";
+
+  // With no books yet there is nothing to append to, so the only sensible mode is
+  // "new book" — don't offer a choice that has one option.
+  const mustBeNew = !state.doc;
+  const creating = state.newBookMode || mustBeNew;
+
+  if (creating) {
+    const label = el("label", "target-label");
+    label.textContent = "New book";
+    const input = el("input", "target-input");
+    input.id = "new-book-title";
+    input.type = "text";
+    input.placeholder = "Untitled manuscript";
+    input.value = state._newBookTitle || "";
+    // Survives a re-render (e.g. switching modes and back) so a typed title is
+    // not silently discarded.
+    input.addEventListener("input", () => { state._newBookTitle = input.value; });
+    label.append(input);
+    box.append(label);
+
+    if (!mustBeNew) {
+      const swap = el("button", "target-swap");
+      swap.type = "button";
+      swap.textContent = `Add to “${state.doc.title}” instead`;
+      swap.addEventListener("click", () => {
+        state.newBookMode = false;
+        renderUploadTarget();
+      });
+      box.append(swap);
+    }
+  } else {
+    const info = el("div", "target-label");
+    info.innerHTML = `Adding pages to <strong></strong>`;
+    info.querySelector("strong").textContent = state.doc.title;
+    const swap = el("button", "target-swap");
+    swap.type = "button";
+    swap.textContent = "Start a new book instead";
+    swap.addEventListener("click", () => {
+      state.newBookMode = true;
+      renderUploadTarget();
+    });
+    box.append(info, swap);
+  }
+}
+
+/* The document this upload belongs to, creating it first if we are starting a new
+   book. Returns null if creation failed, so the caller can abort rather than post
+   pages into whatever was open before. */
+async function resolveUploadTarget() {
+  if (!state.newBookMode && state.doc) return state.doc;
+
+  const title = (state._newBookTitle || "").trim() || "Untitled manuscript";
+  let created;
+  try {
+    created = await api("/documents", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title }),
+    });
+  } catch (err) {
+    $("#ingest-status").textContent = errorText(err) || "Could not create the book.";
+    return null;
+  }
+
+  const doc = { id: created.id, slug: created.slug, title, subtitle: "", page_count: 0 };
+  state.doc = doc;
+  state.docs = [...(state.docs || []), doc];   // so the Library grid shows it
+  state.totalPages = 0;
+  state.page = 1;
+  // The upload now belongs to this book: a second drop must extend it, not spawn
+  // another empty book.
+  state.newBookMode = false;
+  state._newBookTitle = "";
+  $("#doc-subtitle").textContent = title;
+  renderUploadTarget();
+  return doc;
+}
+
 async function handleFiles(fileList) {
   const files = Array.from(fileList).filter((f) => f.type.startsWith("image/"));
   if (!files.length) return;
 
-  // ensure a document exists to ingest into
-  if (!state.doc) {
-    const d = await api("/documents", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ title: "My Manuscript" }),
-    });
-    state.doc = { id: d.id, slug: d.slug, title: "My Manuscript", subtitle: "", page_count: 0 };
-  }
+  const doc = await resolveUploadTarget();
+  if (!doc) return;
 
   // preview first file; reset any boxes/state from a previous upload
   state._segPreviewShown = false;
@@ -622,15 +714,20 @@ async function handleFiles(fileList) {
 
   const fd = new FormData();
   files.forEach((f) => fd.append("files", f));
-  $("#ingest-status").textContent = "Uploading…";
-  const resp = await api(`/documents/${state.doc.id}/pages`, { method: "POST", body: fd });
+  $("#ingest-status").textContent = `Uploading to “${doc.title}”…`;
+  // doc, not state.doc: the destination was resolved before this await, and using
+  // the live global here would follow the user if they navigated mid-upload.
+  const resp = await api(`/documents/${doc.id}/pages`, { method: "POST", body: fd });
   // Use the authoritative page numbers the server assigned (don't recompute from a
   // client-side counter, which drifts across reloads/restarts and can point at a
   // previously-seeded page instead of the one just uploaded).
-  pollJob(resp.job_id, rows, files.length, resp.pages || []);
+  pollJob(resp.job_id, rows, files.length, resp.pages || [], doc);
 }
 
-async function pollJob(jobId, rows, total, uploadedPages = []) {
+/* `doc` is the book this job is ingesting into — passed in rather than read from
+   state, because ingestion outlives the view and the user may open another book
+   while it runs. */
+async function pollJob(jobId, rows, total, uploadedPages = [], doc = state.doc) {
   const timer = setInterval(async () => {
     let job;
     try { job = await api(`/jobs/${jobId}`); } catch (e) { return; }
@@ -670,10 +767,11 @@ async function pollJob(jobId, rows, total, uploadedPages = []) {
     if (job.status === "complete" || job.status === "failed") {
       clearInterval(timer);
       if (job.status === "complete") {
-        state.doc.page_count = (state.doc.page_count || 0) + total;
-        state.totalPages = state.doc.page_count;
-        const firstPage = uploadedPages[0] ?? (state.totalPages - total + 1);
-        await drawSegmentation(firstPage);
+        doc.page_count = (doc.page_count || 0) + total;
+        // Only move the reader's page count if the user is still on this book.
+        if (state.doc && state.doc.id === doc.id) state.totalPages = doc.page_count;
+        const firstPage = uploadedPages[0] ?? (doc.page_count - total + 1);
+        await drawSegmentation(firstPage, doc);
       } else {
         $("#ingest-status").textContent = "Failed: " + (job.message || "error");
       }
@@ -715,9 +813,9 @@ function drawSegPreview(sp) {
 }
 
 /* Final overlay: fetch the finished page and draw boxes tinted by confidence. */
-async function drawSegmentation(pageNumber) {
+async function drawSegmentation(pageNumber, doc = state.doc) {
   try {
-    const page = await api(`/documents/${state.doc.id}/pages/${pageNumber}`);
+    const page = await api(`/documents/${doc.id}/pages/${pageNumber}`);
     const img = $("#ingest-img");
     const boxes = (page.lines || []).map((ln) => ({ bbox: ln.bbox, review: ln.needs_review }));
     const draw = () => {
@@ -729,7 +827,7 @@ async function drawSegmentation(pageNumber) {
     // fires `load` and the overlay stays empty. Redraw on resize so boxes track the img.
     state._segRedraw = draw;
     img.onload = draw;
-    img.src = imageUrl(state.doc.id, page);
+    img.src = imageUrl(doc.id, page);
     if (img.complete && img.naturalWidth) draw();
   } catch (e) { console.error("drawSegmentation failed", e); }
 }

@@ -331,6 +331,19 @@ class AuthConfig:
     min_password_length: int = field(
         default_factory=lambda: _env_int("INKFERENCE_MIN_PASSWORD_LEN", 10)
     )
+    # Signup checks the address's domain actually accepts mail — a DNS/MX lookup,
+    # which catches the typo domains ("gmial.com") no regex can. Answers are cached
+    # per domain and the resolver fails open when it cannot reach a nameserver, so
+    # the cost is one lookup per new domain and never a failed signup because our
+    # DNS blinked. Off for tests, which must not touch the network.
+    email_check_deliverability: bool = field(
+        default_factory=lambda: _env_bool("INKFERENCE_EMAIL_CHECK_DELIVERABILITY", True)
+    )
+    # email_validator's own default is 15s — far too long to hold a signup request
+    # open behind a slow resolver.
+    email_dns_timeout_seconds: int = field(
+        default_factory=lambda: _env_int("INKFERENCE_EMAIL_DNS_TIMEOUT", 5)
+    )
     # scrypt cost. n must be a power of two; 2**14 keeps a hash near ~100ms on the
     # free CPU Space, which is slow enough to matter and fast enough to log in.
     scrypt_n: int = field(default_factory=lambda: _env_int("INKFERENCE_SCRYPT_N", 2**14))

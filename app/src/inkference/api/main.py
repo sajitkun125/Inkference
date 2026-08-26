@@ -30,6 +30,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import threading
 import unicodedata
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -40,7 +41,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel ,EmailStr, Field
-from email_validator import validate_email, EmailNotValidError ,EmailUndeliverableError
+# EmailUndeliverableError is not imported: it subclasses EmailNotValidError, so
+# catching the base covers both syntax and deliverability failures.
+from email_validator import caching_resolver, validate_email, EmailNotValidError
 
 from ..auth import AccountDisabled, EmailTaken
 from ..config import (
@@ -185,26 +188,59 @@ def _set_session_cookie(response: Response, token: str) -> None:
     )
 
 
+_email_resolver = None
+_email_resolver_lock = threading.Lock()
+
+
+def _dns_resolver():
+    """One shared, caching, short-timeout DNS resolver for address validation.
+
+    Built once and reused, for two reasons. A per-domain LRU cache (honouring TTLs)
+    turns the deliverability check into one lookup per *new* domain rather than one
+    per signup — most signups share a handful of domains. And passing our own
+    resolver stops email_validator from reaching for dnspython's global default and
+    overwriting its timeout, which it warns changes behaviour for every other user
+    of dnspython in the process.
+
+    Unreachable nameservers need no handling here: email_validator already treats
+    Timeout and NoNameservers as "unknown", not as undeliverable, so a resolver
+    outage cannot reject a legitimate address.
+    """
+    global _email_resolver
+    if _email_resolver is None:
+        with _email_resolver_lock:
+            if _email_resolver is None:
+                _email_resolver = caching_resolver(
+                    timeout=auth_cfg.email_dns_timeout_seconds
+                )
+    return _email_resolver
+
+
 @app.post("/api/auth/signup")
 def signup(body: SignupRequest, response: Response) -> dict:
-   # email = (body.email or "").strip()
-    #if not _EMAIL_RE.match(email):
-     #   raise HTTPException(422, "enter a valid email address")
-    try: 
-        validate_email(body.email, check_deliverability=True)
+    check_dns = auth_cfg.email_check_deliverability
+    try:
+        validated = validate_email(
+            body.email or "",
+            check_deliverability=check_dns,
+            dns_resolver=_dns_resolver() if check_dns else None,
+        )
+    except EmailNotValidError as exc:
+        # EmailUndeliverableError subclasses this, so one clause covers both syntax
+        # and deliverability. The library's own wording names the actual problem
+        # ("does not exist", "does not accept email"), which is far more actionable
+        # than a generic rejection.
+        raise HTTPException(422, str(exc))
 
-    except (EmailUndeliverableError, EmailNotValidError) as e:
-            raise HTTPException(422 , f"{str(e)}" )
-    if(not validEmail):
-        raise HTTPException(422 , "Email Address does not exist" )
-        
     if len(body.password or "") < auth_cfg.min_password_length:
         raise HTTPException(
             422, f"password must be at least {auth_cfg.min_password_length} characters"
         )
     store = services.get_auth_store()
     try:
-        user = store.create_user(body.email, body.password, name=body.name)
+        # The normalized form: domain lowercased and IDNs punycoded, so two
+        # spellings of one address cannot become two accounts.
+        user = store.create_user(validated.normalized, body.password, name=body.name)
     except EmailTaken:
         # Deliberately explicit: signup cannot hide that an address is taken, since
         # the account simply cannot be created twice.
@@ -508,11 +544,31 @@ def list_documents() -> list[dict]:
 @app.post("/api/documents", dependencies=[Depends(require_user)])
 def create_document(body: CreateDocument) -> dict:
     store = services.get_store()
-    slug = body.slug or _slugify(body.title)
-    if store.get_document_by_slug(slug):
-        raise HTTPException(409, f"document with slug '{slug}' already exists")
+    if body.slug:
+        # An explicit slug is a request for that exact name, so a clash is a real
+        # conflict the caller has to resolve.
+        if store.get_document_by_slug(body.slug):
+            raise HTTPException(409, f"document with slug '{body.slug}' already exists")
+        slug = body.slug
+    else:
+        # Derived from the title, where a clash is ordinary: two books called
+        # "Untitled manuscript" is a thing users do, and refusing the second one
+        # would block "Add a book" for no reason the user could act on.
+        slug = _unique_slug(store, _slugify(body.title))
     doc_id = store.create_document(title=body.title, slug=slug, subtitle=body.subtitle)
     return {"id": doc_id, "slug": slug}
+
+
+def _unique_slug(store, base: str) -> str:
+    """base, base-2, base-3, … — the first that is free."""
+    if not store.get_document_by_slug(base):
+        return base
+    for n in range(2, 1000):
+        candidate = f"{base}-{n}"
+        if not store.get_document_by_slug(candidate):
+            return candidate
+    # A thousand books sharing one title is not a naming problem any more.
+    raise HTTPException(409, f"too many documents named '{base}'")
 
 
 @app.get("/api/documents/{doc_id}", dependencies=[Depends(require_user)])

@@ -129,7 +129,7 @@
       </div>
 
       <div class="book-grid" id="book-grid">
-        <a class="add-book" href="#upload">
+        <a class="add-book" id="add-book" href="#upload">
           <div class="add-book-face">
             <div class="add-plus">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="#f6ead8" stroke-width="2.2" stroke-linecap="round"/></svg>
@@ -227,6 +227,11 @@
   <!-- ===== Upload & Process ===== -->
   <main class="view hidden" id="view-upload">
     <section class="scan-pane">
+      <!-- Where these pages will land. Rendered by renderUploadTarget(): a title
+           field when starting a new book, otherwise the name of the book being
+           added to plus a way to switch. Without this the destination was invisible
+           and pages silently joined whichever book happened to be open. -->
+      <div class="upload-target" id="upload-target"></div>
       <div class="dropzone" id="dropzone">
         <div class="drop-icon">⤓</div>
         <div>
